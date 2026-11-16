@@ -1,10 +1,10 @@
-# Prompt para Claude Code — Manejo de Proveedores (BACSS)
+# Prompt para Claude Code — Manejo de Proveedores
 
-Copia todo lo que está debajo de la línea y pégalo en Claude Code abierto en esta carpeta (`D:\BACSS\manejoProvedores`).
+Copia todo lo que está debajo de la línea y pégalo en Claude Code abierto en la carpeta del proyecto.
 
 ---
 
-Quiero que construyas en esta carpeta una aplicación web pequeña llamada **Manejo de Proveedores**, un producto de BACSS. Sirve para llevar el control de los proveedores de una empresa (datos de identificación, datos bancarios, días de crédito) y avisar con alarmas de los pagos que se acercan o están vencidos. Hoy todo eso vive en un Excel que se mantiene a mano; la app lo reemplaza.
+Quiero que construyas en esta carpeta una aplicación web pequeña llamada **Manejo de Proveedores**. Sirve para llevar el control de los proveedores de una empresa (datos de identificación, datos bancarios, días de crédito) y avisar con alarmas de los pagos que se acercan o están vencidos. Hoy todo eso vive en un Excel que se mantiene a mano; la app lo reemplaza.
 
 ## Contexto de uso
 

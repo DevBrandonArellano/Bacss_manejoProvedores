@@ -1,4 +1,4 @@
-# Manejo de Proveedores (BACSS)
+# Manejo de Proveedores
 
 Aplicación web para llevar el control de proveedores (identificación, datos bancarios, condición de crédito), registrar facturas, avisar de vencimientos y generar el archivo de pago masivo al banco. Interfaz en español. Python 3.11 + FastAPI + Jinja2 + HTMX + SQLite, en un solo contenedor.
 

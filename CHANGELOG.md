@@ -1,4 +1,4 @@
-# Changelog — Manejo de Proveedores (BACSS)
+# Changelog — Manejo de Proveedores
 
 ## [Sin publicar] — 2026-11-13 · Sesión 1 (en pausa)
 
