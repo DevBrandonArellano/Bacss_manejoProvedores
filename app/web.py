@@ -4,8 +4,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlencode
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -68,6 +69,16 @@ plantillas.env.globals["ESTADOS_APROBACION"] = modelos.ESTADOS_APROBACION
 plantillas.env.globals["ESTADOS_FACTURA"] = modelos.ESTADOS_FACTURA
 plantillas.env.globals["TIPOS_CREDITO"] = credito.TIPOS
 plantillas.env.globals["VERSION"] = VERSION
+
+
+def _url_con(base: str, parametros: dict, **cambios) -> str:
+    """URL con los filtros actuales y algunos cambiados (orden, página); omite los vacíos."""
+    datos = {**(parametros or {}), **cambios}
+    datos = {k: v for k, v in datos.items() if v not in (None, "")}
+    return f"{base}?{urlencode(datos)}" if datos else base
+
+
+plantillas.env.globals["url_con"] = _url_con
 
 
 # ---------------------------------------------------------------- sesión y CSRF
@@ -140,6 +151,12 @@ puede_aprobar = requiere(modelos.ADMINISTRADOR, modelos.APROBADOR)
 # ---------------------------------------------------------------- respuestas
 
 
+def requiere_facturacion() -> None:
+    """Las pantallas de facturas existen solo si FACTURACION_ACTIVA=true; si no, es como si no estuvieran."""
+    if not config.actual.facturacion_activa:
+        raise HTTPException(status_code=404)
+
+
 def es_htmx(request: Request) -> bool:
     return request.headers.get("HX-Request") == "true"
 
@@ -155,8 +172,10 @@ def render(request: Request, plantilla: str, status_code: int = 200, **contexto)
     contexto.setdefault("usuario", getattr(request.state, "usuario", None))
     contexto["pendientes"] = getattr(request.state, "pendientes", 0)
     contexto["csrf"] = token_csrf(request)
-    contexto["mensajes"] = request.session.pop("flash", [])
+    # Una respuesta parcial de HTMX (búsqueda en vivo, vista previa) no debe gastar los avisos pendientes.
+    contexto["mensajes"] = [] if es_htmx(request) else request.session.pop("flash", [])
     contexto["hoy"] = config.hoy()
+    contexto["facturacion"] = config.actual.facturacion_activa
     contexto["ruta_actual"] = request.url.path
     return plantillas.TemplateResponse(request, plantilla, contexto, status_code=status_code)
 

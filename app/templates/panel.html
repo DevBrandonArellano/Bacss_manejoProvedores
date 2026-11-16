@@ -56,31 +56,45 @@
 </div>
 
 <div class="rejilla-3">
-  <div class="tarjeta vencidas">
+  <a class="tarjeta vencidas enlace-tarjeta" href="#vencidas">
     <div class="suave">Vencidas</div>
-    <div class="cifra">{{ grupos["vencidas"]|length }}</div>
-    <div class="suave">{{ totales["vencidas"] or "—" }}</div>
-  </div>
-  <div class="tarjeta hoy">
+    <div class="cifra">{{ totales["vencidas"] or "—" }}</div>
+    <div class="suave">{{ grupos["vencidas"]|length }} factura{{ "s" if grupos["vencidas"]|length != 1 }}</div>
+  </a>
+  <a class="tarjeta hoy enlace-tarjeta" href="#hoy">
     <div class="suave">Vencen hoy ({{ hoy|fecha }})</div>
-    <div class="cifra">{{ grupos["hoy"]|length }}</div>
-    <div class="suave">{{ totales["hoy"] or "—" }}</div>
-  </div>
-  <div class="tarjeta proximas">
+    <div class="cifra">{{ totales["hoy"] or "—" }}</div>
+    <div class="suave">{{ grupos["hoy"]|length }} factura{{ "s" if grupos["hoy"]|length != 1 }}</div>
+  </a>
+  <a class="tarjeta proximas enlace-tarjeta" href="#proximas">
     <div class="suave">Próximos {{ dias }} días</div>
-    <div class="cifra">{{ grupos["proximas"]|length }}</div>
-    <div class="suave">{{ totales["proximas"] or "—" }}</div>
-  </div>
+    <div class="cifra">{{ totales["proximas"] or "—" }}</div>
+    <div class="suave">{{ grupos["proximas"]|length }} factura{{ "s" if grupos["proximas"]|length != 1 }}</div>
+  </a>
 </div>
 
-<h2>Vencidas</h2>
-{{ tabla(grupos["vencidas"], "No hay facturas vencidas.", csrf, usuario, hoy) }}
+{% if not grupos["vencidas"] and not grupos["hoy"] and not grupos["proximas"] %}
+<div class="tarjeta guia">
+  <h2>Todo al día</h2>
+  <p class="suave">No hay facturas vencidas, que venzan hoy ni en los próximos {{ dias }} días.</p>
+  {% if usuario.puede_editar %}<a class="boton" href="/facturas/nueva">Registrar una factura</a>{% endif %}
+</div>
+{% endif %}
 
-<h2>Vencen hoy</h2>
-{{ tabla(grupos["hoy"], "Hoy no vence ninguna factura.", csrf, usuario, hoy) }}
+{% if grupos["vencidas"] %}
+<h2 id="vencidas">Vencidas</h2>
+{{ tabla(grupos["vencidas"], "", csrf, usuario, hoy) }}
+{% endif %}
 
-<h2>Vencen en los próximos {{ dias }} días</h2>
-{{ tabla(grupos["proximas"], "No hay facturas por vencer en ese plazo.", csrf, usuario, hoy) }}
+{% if grupos["hoy"] %}
+<h2 id="hoy">Vencen hoy</h2>
+{{ tabla(grupos["hoy"], "", csrf, usuario, hoy) }}
+{% endif %}
+
+{% if grupos["proximas"] %}
+<h2 id="proximas">Vencen en los próximos {{ dias }} días</h2>
+{{ tabla(grupos["proximas"], "", csrf, usuario, hoy) }}
+{% endif %}
 
 <p class="suave">
   Días de aviso configurados: {{ dias_configurado }}.

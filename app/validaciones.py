@@ -4,6 +4,7 @@ from typing import Dict, List
 
 from sqlalchemy import select
 
+from . import config
 from .modelos import Proveedor
 from .servicios import LARGO_ID, correo_valido, partes_correo
 
@@ -58,7 +59,9 @@ def revisar(db, incluir_inactivos: bool = False) -> List[dict]:
             for parte in partes_correo(p.correo):
                 por_correo[parte.lower()].append(p)
         if not p.credito_tipo:
-            casos["sin_credito"].append((p, "Sus facturas se tratarán como de contado."))
+            casos["sin_credito"].append(
+                (p, "Sus facturas se tratarán como de contado." if config.actual.facturacion_activa else "No tiene condición de crédito definida.")
+            )
         por_nombre[p.nombre_norm].append(p)
 
     for cuenta, lista in por_cuenta.items():

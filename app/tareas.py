@@ -86,7 +86,7 @@ def enviar_correo(asunto: str, cuerpo: str) -> None:
 
 def revisar_alarmas() -> Optional[dict]:
     """Cuenta lo vencido y lo próximo a vencer; envía el resumen por correo solo si CORREO_ACTIVO=true."""
-    if db.SessionLocal is None:
+    if db.SessionLocal is None or not config.actual.facturacion_activa:
         return None
     cfg = config.actual
     sesion = db.SessionLocal()

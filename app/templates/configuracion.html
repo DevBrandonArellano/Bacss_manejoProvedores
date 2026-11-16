@@ -4,6 +4,7 @@
 <div class="cabecera"><h1>Configuración</h1></div>
 
 <div class="rejilla">
+  {% if facturacion %}
   <div class="tarjeta">
     <h2>Alarmas y archivo de pago</h2>
     <form method="post" action="/configuracion">
@@ -21,23 +22,29 @@
       <button type="submit">Guardar</button>
     </form>
   </div>
+  {% endif %}
 
   <div class="tarjeta">
-    <h2>Revisión diaria</h2>
+    <h2>{{ "Revisión diaria" if facturacion else "Tarea diaria" }}</h2>
     <dl class="datos">
       <dt>Hora programada</dt><dd>{{ cfg.hora_tarea }} ({{ cfg.zona }}){% if not cfg.tareas_activas %} — <strong>apagada</strong>{% endif %}</dd>
+      {% if not facturacion %}<dt>Qué hace</dt><dd>Respaldo de la base de datos</dd>{% endif %}
+      {% if facturacion %}
       <dt>Última revisión</dt><dd>{{ ultima_revision or "Todavía no se ha ejecutado" }}</dd>
       <dt>Envío por correo</dt>
       <dd>
         {% if cfg.correo_activo %}Encendido → {{ cfg.correo_destinatarios|join(", ") or "sin destinatarios" }}
         {% else %}Apagado (se enciende con <code>CORREO_ACTIVO=true</code> en <code>.env</code>){% endif %}
       </dd>
+      {% endif %}
     </dl>
+    {% if facturacion %}
     <hr class="separador">
     <form method="post" action="/configuracion/revisar-alarmas">
       <input type="hidden" name="csrf_token" value="{{ csrf }}">
       <button type="submit" class="boton-claro">Revisar alarmas ahora</button>
     </form>
+    {% endif %}
   </div>
 
   <div class="tarjeta">

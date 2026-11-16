@@ -1,0 +1,20 @@
+{% if not vence %}
+<div class="ayuda">Elija el proveedor y la fecha para ver aquí cuándo vencerá la factura.</div>
+{% else %}
+<div class="vencimiento {{ 'vencimiento-pasado' if faltan < 0 }}" role="status">
+  <span class="suave">Vencimiento</span>
+  <strong>{{ dia_semana|capitalize }} {{ vence|fecha }}</strong>
+  <span>
+    {% if faltan < 0 %}· ya vencida hace {{ -faltan }} día{{ "s" if faltan != -1 }}
+    {% elif faltan == 0 %}· vence hoy
+    {% else %}· dentro de {{ faltan }} día{{ "s" if faltan != 1 }}{% endif %}
+  </span>
+  <span class="suave">({{ condicion }})</span>
+</div>
+{% if sin_condicion %}
+<div class="ayuda-error">Este proveedor no tiene condición de crédito: se tratará como de contado. Puede definirla en su ficha.</div>
+{% endif %}
+{% if not p.aprobado %}
+<div class="ayuda">Aviso: el proveedor está {{ p.estado_texto|lower }}; la factura no saldrá en el pago masivo hasta que se apruebe.</div>
+{% endif %}
+{% endif %}

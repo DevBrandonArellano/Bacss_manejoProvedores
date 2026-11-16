@@ -107,6 +107,7 @@ def test_no_se_reabre_una_anulada_si_hay_otra_con_el_mismo_numero(sesion, person
     p = ayudas.proveedor_aprobado(sesion, creador, personas["aprobador"])
     vieja = ayudas.factura(sesion, p, creador, numero="F-1")
     servicios.anular_factura(sesion, vieja)
+    sesion.commit()  # como la ruta; la sesión no hace autoflush
     ayudas.factura(sesion, p, creador, numero="F-1")
     with pytest.raises(ErrorNegocio, match="otra factura"):
         servicios.reabrir_factura(sesion, vieja)

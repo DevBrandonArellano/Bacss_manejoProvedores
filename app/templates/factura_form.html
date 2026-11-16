@@ -20,14 +20,16 @@
     <div class="rejilla">
       <div class="ancho-total">
         <label for="proveedor_id">Proveedor</label>
-        <select id="proveedor_id" name="proveedor_id" required>
+        <select id="proveedor_id" name="proveedor_id" data-buscar="Escriba el nombre del proveedor…" required>
           <option value="">— Elija —</option>
           {% for p in proveedores %}
           <option value="{{ p.id }}" {{ 'selected' if datos.proveedor_id == p.id }}>{{ p.nombre }} — {{ p.credito_texto }}{% if not p.aprobado %} ({{ p.estado_texto|lower }}){% endif %}</option>
           {% endfor %}
         </select>
-        <div class="ayuda">La fecha de vencimiento se calcula sola con la condición de crédito del proveedor.</div>
       </div>
+      <div class="ancho-total" id="vencimiento" aria-live="polite"
+           hx-get="/facturas/vencimiento" hx-trigger="load, change from:#proveedor_id, change from:#fecha"
+           hx-include="#proveedor_id, #fecha"></div>
       <div>
         <label for="numero">Número de factura</label>
         <input type="text" id="numero" name="numero" value="{{ datos.numero or '' }}" maxlength="60" required>
@@ -52,6 +54,7 @@
     <hr class="separador">
     <div class="acciones">
       <button type="submit">Guardar factura</button>
+      <button type="submit" name="despues" value="otra" class="boton-claro">Guardar y registrar otra</button>
       <a class="boton boton-claro" href="/facturas">Cancelar</a>
     </div>
   </form>

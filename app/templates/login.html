@@ -6,15 +6,15 @@
     <h1>Manejo de Proveedores</h1>
     <p class="suave">Inicie sesión para continuar.</p>
     {% if error %}<div class="aviso aviso-error" role="alert">{{ error }}</div>{% endif %}
-    <form method="post" action="/login" autocomplete="off">
+    <form method="post" action="/login" autocomplete="on">
       <input type="hidden" name="csrf_token" value="{{ csrf }}">
       <p>
         <label for="usuario">Usuario</label>
-        <input type="text" id="usuario" name="usuario" value="{{ usuario_escrito }}" required autofocus>
+        <input type="text" id="usuario" name="usuario" value="{{ usuario_escrito }}" autocomplete="username" required autofocus>
       </p>
       <p>
         <label for="clave">Contraseña</label>
-        <input type="password" id="clave" name="clave" required>
+        <input type="password" id="clave" name="clave" autocomplete="current-password" data-ojo required>
       </p>
       <button type="submit">Entrar</button>
     </form>

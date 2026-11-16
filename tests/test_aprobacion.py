@@ -66,7 +66,8 @@ def test_nadie_aprueba_su_propia_modificacion(sesion, personas):
 
     with pytest.raises(ErrorNegocio, match="última modificación"):
         servicios.aprobar(sesion, p, personas["admin"])
-    with pytest.raises(ErrorNegocio, match="usted mismo creó"):
+    # El creador no tiene perfil de aprobador: se le niega antes de revisar la autoría.
+    with pytest.raises(ErrorNegocio, match="perfil no permite"):
         servicios.aprobar(sesion, p, personas["creador"])
     servicios.aprobar(sesion, p, personas["aprobador"])
     assert p.estado_aprobacion == APROBADO

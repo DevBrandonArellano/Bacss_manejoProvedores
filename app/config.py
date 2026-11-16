@@ -49,6 +49,7 @@ class Config:
     zona: str
     hora_tarea: str
     tareas_activas: bool
+    facturacion_activa: bool
     correo_activo: bool
     smtp_host: str
     smtp_puerto: int
@@ -84,6 +85,7 @@ def cargar() -> Config:
         zona=_texto("ZONA_HORARIA", "America/Guayaquil"),
         hora_tarea=_texto("HORA_TAREA_DIARIA", "07:00"),
         tareas_activas=_bool("TAREAS_ACTIVAS", True),
+        facturacion_activa=_bool("FACTURACION_ACTIVA", False),
         correo_activo=_bool("CORREO_ACTIVO", False),
         smtp_host=_texto("SMTP_HOST"),
         smtp_puerto=_entero("SMTP_PUERTO", 587),

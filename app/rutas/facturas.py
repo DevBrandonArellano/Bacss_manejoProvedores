@@ -1,16 +1,16 @@
 """Cuentas por pagar: registro de facturas, pago y exportación del archivo de pago masivo."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .. import config, credito, exportacion, servicios
 from ..db import get_db
 from ..modelos import ESTADOS_FACTURA, FACTURA_PENDIENTE, Factura, Proveedor, Usuario
 from ..servicios import ErrorNegocio
-from ..web import aviso, entero, es_htmx, fecha_de, ir, puede_editar, render, ruta_segura, usuario_actual
+from ..web import aviso, entero, es_htmx, fecha_de, ir, puede_editar, render, requiere_facturacion, ruta_segura, usuario_actual
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(requiere_facturacion)])
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -53,6 +53,7 @@ def listado(
         filas=filas,
         filtros={"q": q, "estado": estado},
         total=servicios.totales(facturas),
+        hay_facturas=bool(facturas) or sesion.scalar(select(func.count(Factura.id))) > 0,
     )
 
 
@@ -64,11 +65,42 @@ def _proveedores_activos(sesion: Session):
 def pantalla_nueva(
     request: Request,
     proveedor: str = "",
+    fecha: str = "",
     u: Usuario = Depends(puede_editar),
     sesion: Session = Depends(get_db),
 ):
-    datos = {"proveedor_id": entero(proveedor), "fecha": config.hoy().isoformat(), "moneda": "USD"}
+    elegida = fecha_de(fecha) or config.hoy()
+    datos = {"proveedor_id": entero(proveedor), "fecha": elegida.isoformat(), "moneda": "USD"}
     return render(request, "factura_form.html", datos=datos, proveedores=_proveedores_activos(sesion), errores=[])
+
+
+DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+@router.get("/facturas/vencimiento")
+def vista_vencimiento(
+    request: Request,
+    proveedor_id: str = "",
+    fecha: str = "",
+    u: Usuario = Depends(puede_editar),
+    sesion: Session = Depends(get_db),
+):
+    """Vista previa del vencimiento mientras se llena el formulario (misma regla que al guardar)."""
+    p = sesion.get(Proveedor, entero(proveedor_id)) if entero(proveedor_id) else None
+    dia = fecha_de(fecha)
+    if p is None or dia is None:
+        return render(request, "_vencimiento.html", vence=None)
+    vence = credito.calcular_vencimiento(dia, p.credito_tipo, p.credito_valor)
+    return render(
+        request,
+        "_vencimiento.html",
+        vence=vence,
+        dia_semana=DIAS_SEMANA[vence.weekday()],
+        faltan=(vence - config.hoy()).days,
+        condicion=credito.texto(p.credito_tipo, p.credito_valor),
+        sin_condicion=not p.credito_tipo,
+        p=p,
+    )
 
 
 @router.post("/facturas/nueva")
@@ -114,6 +146,8 @@ async def crear(request: Request, u: Usuario = Depends(puede_editar), sesion: Se
     aviso(request, mensaje)
     if not p.credito_tipo:
         aviso(request, "El proveedor no tiene condición de crédito: la factura se trató como de contado.", "alerta")
+    if formulario.get("despues") == "otra":
+        return ir(f"/facturas/nueva?proveedor={p.id}&fecha={fecha.isoformat()}")
     return ir("/facturas")
 
 
@@ -147,6 +181,30 @@ async def exportar(request: Request, u: Usuario = Depends(puede_editar), sesion:
     sesion.commit()
     nombre = f"pago-masivo-{ahora:%Y%m%d-%H%M}.xlsx"
     return Response(contenido, media_type=XLSX, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
+@router.post("/facturas/pagar-lote")
+async def pagar_lote(request: Request, u: Usuario = Depends(puede_editar), sesion: Session = Depends(get_db)):
+    formulario = await request.form()
+    ids = [i for i in (entero(v) for v in formulario.getlist("ids")) if i is not None]
+    if not ids:
+        aviso(request, "Seleccione al menos una factura.", "alerta")
+        return ir("/facturas")
+    facturas = sesion.scalars(select(Factura).where(Factura.id.in_(ids))).all()
+    pagadas = 0
+    for f in facturas:
+        if f.estado == FACTURA_PENDIENTE:
+            servicios.marcar_pagada(sesion, f, u)
+            pagadas += 1
+    sesion.commit()
+    omitidas = len(ids) - pagadas
+    texto = "1 factura marcada como pagada." if pagadas == 1 else f"{pagadas} facturas marcadas como pagadas."
+    if omitidas == 1:
+        texto += " 1 no estaba pendiente y se omitió."
+    elif omitidas:
+        texto += f" {omitidas} no estaban pendientes y se omitieron."
+    aviso(request, texto, "ok" if not omitidas else "alerta")
+    return ir("/facturas")
 
 
 @router.post("/facturas/{fid}/pagar")

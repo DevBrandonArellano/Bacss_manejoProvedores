@@ -5,25 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}Inicio{% endblock %} · Manejo de Proveedores</title>
   <link rel="stylesheet" href="/static/estilo.css?v={{ VERSION }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f4e79'/%3E%3Cpath d='M9 22V10h7a4 4 0 010 8h-4' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
   <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/app.js?v={{ VERSION }}" defer></script>
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
 {% if usuario %}
 <header class="barra">
   <a class="marca" href="/">Manejo de Proveedores</a>
   <nav>
-    <a href="/" class="{{ 'activo' if ruta_actual == '/' }}">Panel</a>
+    {% if facturacion %}<a href="/" class="{{ 'activo' if ruta_actual == '/' }}">Panel</a>{% endif %}
     <a href="/proveedores" class="{{ 'activo' if ruta_actual.startswith('/proveedores') }}">Proveedores</a>
-    <a href="/facturas" class="{{ 'activo' if ruta_actual.startswith('/facturas') }}">Facturas</a>
+    {% if facturacion %}<a href="/facturas" class="{{ 'activo' if ruta_actual.startswith('/facturas') }}">Facturas</a>{% endif %}
     {% if usuario.puede_aprobar %}
     <a href="/aprobaciones" class="{{ 'activo' if ruta_actual.startswith('/aprobaciones') }}">Aprobaciones{% if pendientes %}<span class="contador">{{ pendientes }}</span>{% endif %}</a>
     {% endif %}
-    <a href="/validaciones" class="{{ 'activo' if ruta_actual.startswith('/validaciones') }}">Validaciones</a>
-    <a href="/historial" class="{{ 'activo' if ruta_actual.startswith('/historial') }}">Historial</a>
+    <details class="menu {{ 'activo' if ruta_actual.startswith(('/validaciones', '/historial')) }}">
+      <summary>Control</summary>
+      <div class="menu-lista">
+        <a href="/validaciones" class="{{ 'activo' if ruta_actual.startswith('/validaciones') }}">Validaciones</a>
+        <a href="/historial" class="{{ 'activo' if ruta_actual.startswith('/historial') }}">Historial de cambios</a>
+      </div>
+    </details>
     {% if usuario.es_admin %}
-    <a href="/catalogos" class="{{ 'activo' if ruta_actual.startswith('/catalogos') }}">Catálogos</a>
-    <a href="/usuarios" class="{{ 'activo' if ruta_actual.startswith('/usuarios') }}">Usuarios</a>
-    <a href="/configuracion" class="{{ 'activo' if ruta_actual.startswith('/configuracion') }}">Configuración</a>
+    <details class="menu {{ 'activo' if ruta_actual.startswith(('/catalogos', '/usuarios', '/configuracion')) }}">
+      <summary>Administración</summary>
+      <div class="menu-lista">
+        <a href="/catalogos" class="{{ 'activo' if ruta_actual.startswith('/catalogos') }}">Catálogos</a>
+        <a href="/usuarios" class="{{ 'activo' if ruta_actual.startswith('/usuarios') }}">Usuarios</a>
+        <a href="/configuracion" class="{{ 'activo' if ruta_actual.startswith('/configuracion') }}">Configuración</a>
+      </div>
+    </details>
     {% endif %}
   </nav>
   <div class="quien">
@@ -38,7 +50,7 @@
 {% endif %}
 <main class="contenido">
   {% for mensaje in mensajes %}
-  <div class="aviso aviso-{{ mensaje[0] }}" role="status">{{ mensaje[1] }}</div>
+  <div class="aviso aviso-{{ mensaje[0] }}" role="{{ 'alert' if mensaje[0] == 'error' else 'status' }}" data-cerrable>{{ mensaje[1] }}</div>
   {% endfor %}
   {% block contenido %}{% endblock %}
 </main>

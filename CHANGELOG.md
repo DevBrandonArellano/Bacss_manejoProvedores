@@ -31,6 +31,48 @@
 - **Despliegue**: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`, `requirements.txt`, `requirements-dev.txt`, `pytest.ini`.
 - **`.gitignore`**: excluye `datos/`, la base de datos, respaldos, `.env`, archivos Excel y el entorno virtual.
 
+### Sesión 5 · 2026-11-16 · Facturación oculta (solo proveedores)
+
+- Decisión del usuario: por ahora solo se registran proveedores; las funciones de facturación se ocultan **sin borrar código**.
+- Nueva variable `FACTURACION_ACTIVA` (por defecto `false`; documentada en `.env.example` y README). Apagada:
+  - todo el router de facturas responde 404 (incluye pago en lote, vista previa y exportación de pago masivo);
+  - sin «Panel» ni «Facturas» en el menú; `/` redirige a `/proveedores`;
+  - la ficha, aprobaciones, usuarios, configuración y validaciones no mencionan facturas ni alarmas; las rutas `/configuracion` (días de aviso y contrapartida) y `/configuracion/revisar-alarmas` dan 404;
+  - la tarea diaria solo respalda (no revisa alarmas ni envía correo).
+- Las pruebas arrancan con el interruptor en `true` (conftest) para conservar la cobertura de facturas; +16 pruebas del modo apagado (`tests/test_sin_facturacion.py`) → 170/170.
+- Verificado en Firefox con la app real: el menú queda en Proveedores / Aprobaciones / Control / Administración y `/facturas` da 404. Las tablas de facturas no se tocan.
+- Los estilos y el JavaScript de facturas siguen cargándose (inofensivos); no se separaron.
+
+### Sesión 4 · 2026-11-16 · Mejoras de uso (revisión de experiencia de usuario)
+
+Hecho a partir de una revisión de las pantallas; sin dependencias nuevas ni internet (`app/static/app.js` propio + HTMX local). Todo es mejora progresiva: sin JavaScript los formularios siguen funcionando.
+
+- **Buscador de bancos y de proveedores** (en vez de listas de 459 y ~1000 entradas): escribir filtra sin tildes, flechas + Enter, «Más usados» arriba.
+- **Vista previa del vencimiento** al registrar una factura (`GET /facturas/vencimiento`, misma regla de `credito.calcular_vencimiento`), con día de la semana y aviso si el proveedor no está aprobado o no tiene crédito definido.
+- **Condición de crédito**: solo se muestra el campo que corresponde (días / día del mes).
+- **Barra de selección de facturas**: «N seleccionadas · total», **Exportar pago masivo** y **Marcar pagadas** (nuevo `POST /facturas/pagar-lote`); botones desactivados sin selección.
+- **Panel**: tarjetas con el monto como cifra principal y enlaces a su tabla; se ocultan las tablas vacías; «Todo al día» cuando no hay nada.
+- **Menú**: «Control» (Validaciones, Historial) y «Administración» (Catálogos, Usuarios, Configuración) como desplegables.
+- **Proveedores**: ordenar por columna y páginas de 50 (`orden`, `dir`, `pagina`), conservando filtros y búsqueda en vivo.
+- **Facturas**: filtros en vivo con la URL actualizada.
+- **Formularios**: validación al salir del campo (largo de cédula/RUC según el tipo, correo) y aviso en vivo de identificación o cuenta ya usadas por otro proveedor (`GET /proveedores/verificar`).
+- **Pantallas vacías** que guían al primer paso; avisos con ✕ (los de éxito se cierran solos); «Guardar y registrar otra»; el navegador puede recordar el usuario; ícono de la app; foco visible con teclado.
+- Las respuestas parciales de HTMX ya no consumen los avisos pendientes.
+- **Pruebas**: +13 (`tests/test_experiencia.py`) → 154/154. Además, recorrido en Firefox headless (Selenium, fuera del proyecto): buscador, validaciones, crédito condicional, aviso de duplicados, vista previa, barra de selección, menús, orden y vista móvil de 390 px. Ese recorrido encontró un error real (la barra de selección no se actualizaba) que ya está corregido.
+- README: el procedimiento de restauración ahora borra `proveedores.db-wal` y `-shm` antes de copiar el respaldo.
+- Sin verificar: Chrome/Edge/Safari (solo Firefox), lectores de pantalla, y la máquina Windows de destino.
+
+### Sesión 3 · 2026-11-16 (primera ejecución, Docker en Linux)
+
+- `docker compose build`: las dependencias de `requirements*.txt` instalan juntas sin conflictos.
+- `pytest` en el contenedor: 139/141 al inicio. Las 2 fallas eran de las pruebas, no de la app; corregidas → **141/141**.
+  - `test_nadie_aprueba_su_propia_modificacion`: esperaba «usted mismo creó» para el creador, pero el servidor (correctamente) responde antes «Su perfil no permite aprobar».
+  - `test_no_se_reabre_una_anulada_si_hay_otra_con_el_mismo_numero`: faltaba `commit()` tras anular (la sesión tiene `autoflush=False`; las rutas sí hacen commit).
+- App arriba con `docker compose up -d`, healthcheck `healthy`, sin sesión redirige a `/login`.
+- Recorrido completo por HTTP contra la app en marcha (datos inventados): login admin → catálogo con 459 instituciones → alta de creador y aprobador → creador registra proveedor (queda Pendiente, no puede aprobarlo: 403) → aprobador lo aprueba → facturas vencida / vence hoy / próxima aparecen en el panel → exportación de pago masivo con las 15 columnas de `Hoja 1` → exportación de proveedores → cambio de cuenta devuelve a Pendiente, queda en historial y bloquea la exportación → todas las pantallas de administración responden 200 → respaldo manual creado en `respaldos/`.
+- Restauración desde respaldo probada (en Linux con `$(pwd)` en lugar de `%cd%`).
+- Sin verificar aún: envío de correo, tarea diaria a la hora programada, carga de catálogos desde Excel (no hay `datos/proveedores.xlsx` en esta máquina), interfaz en navegador real, y la máquina Windows de destino.
+
 ### Sesión 2 · 2026-11-16 (sin ejecutar nada; Docker no está en esta máquina)
 
 - Se escribió `README.md`.

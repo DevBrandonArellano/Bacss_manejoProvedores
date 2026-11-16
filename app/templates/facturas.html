@@ -4,17 +4,13 @@
 <div class="cabecera">
   <h1>Facturas por pagar</h1>
   <div class="acciones">
-    {% if usuario.puede_editar %}
-    <form method="post" action="/facturas/exportar" id="exportar" class="en-linea">
-      <input type="hidden" name="csrf_token" value="{{ csrf }}">
-      <button type="submit" class="boton-claro">Exportar pago masivo (seleccionadas)</button>
-    </form>
-    <a class="boton" href="/facturas/nueva">Registrar factura</a>
-    {% endif %}
+    {% if usuario.puede_editar %}<a class="boton" href="/facturas/nueva">Registrar factura</a>{% endif %}
   </div>
 </div>
 
-<form method="get" action="/facturas" class="filtros">
+{% if hay_facturas %}
+<form method="get" action="/facturas" class="filtros" hx-get="/facturas" hx-target="#lista-facturas" hx-select="#lista-facturas"
+      hx-swap="outerHTML" hx-push-url="true" hx-trigger="input changed delay:300ms from:#q, change from:#estado">
   <div class="crece">
     <label for="q">Buscar</label>
     <input type="search" id="q" name="q" value="{{ filtros.q }}" placeholder="Proveedor o número de factura">
@@ -31,14 +27,21 @@
   <div><button type="submit" class="boton-claro">Filtrar</button></div>
 </form>
 
+<div id="lista-facturas">
+{% if not filas and not filtros.q and filtros.estado == "pendiente" %}
+<div class="tarjeta guia">
+  <h2>No hay facturas pendientes</h2>
+  <p class="suave">Las facturas registradas aparecen aquí con su fecha de vencimiento, y se pueden seleccionar para exportar el archivo de pago.</p>
+  {% if usuario.puede_editar %}<a class="boton" href="/facturas/nueva">Registrar una factura</a>{% endif %}
+</div>
+{% else %}
 <div class="tabla-envoltura">
   <table>
     <thead>
       <tr>
         <th>
           {% if usuario.puede_editar %}
-          <input type="checkbox" aria-label="Seleccionar todas"
-                 onclick="document.querySelectorAll('input[form=exportar][name=ids]:not(:disabled)').forEach(c => c.checked = this.checked)">
+          <input type="checkbox" aria-label="Seleccionar todas" data-marcar-todas="input[form=seleccion][name=ids]">
           {% endif %}
         </th>
         <th>Proveedor</th><th>Factura</th><th>Fecha</th><th>Vence</th><th class="num">Valor</th><th>Estado</th><th></th>
@@ -50,7 +53,7 @@
       <tr>
         <td>
           {% if usuario.puede_editar and f.estado == "pendiente" %}
-          <input type="checkbox" form="exportar" name="ids" value="{{ f.id }}" {{ 'disabled' if fila["bloqueo"] }}
+          <input type="checkbox" form="seleccion" name="ids" value="{{ f.id }}" data-valor="{{ f.valor_centavos }}" data-moneda="{{ f.moneda }}" {{ 'disabled' if fila["bloqueo"] }}
                  aria-label="Seleccionar factura {{ f.numero }}">
           {% endif %}
         </td>
@@ -106,4 +109,25 @@
   Solo se pueden exportar facturas pendientes de proveedores <strong>aprobados</strong>, activos y con datos bancarios completos.
   El archivo tiene el mismo formato de la hoja de pago masivo del Excel.
 </p>
+{% endif %}
+</div>
+
+{% if usuario.puede_editar %}
+<form method="post" action="/facturas/exportar" id="seleccion" class="barra-seleccion" aria-live="polite">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <span data-cuenta class="suave">Marque facturas en la lista para exportarlas o marcarlas como pagadas.</span>
+  <div class="acciones">
+    <button type="submit" disabled data-requiere-seleccion>Exportar pago masivo</button>
+    <button type="submit" formaction="/facturas/pagar-lote" class="boton-ok" disabled data-requiere-seleccion
+            data-confirmar="¿Marcar como pagadas las facturas seleccionadas?">Marcar pagadas</button>
+  </div>
+</form>
+{% endif %}
+{% else %}
+<div class="tarjeta guia">
+  <h2>Aún no hay facturas</h2>
+  <p class="suave">Registre las facturas de sus proveedores: el vencimiento se calcula con su condición de crédito y aparece en el panel.</p>
+  {% if usuario.puede_editar %}<a class="boton" href="/facturas/nueva">Registrar la primera factura</a>{% endif %}
+</div>
+{% endif %}
 {% endblock %}

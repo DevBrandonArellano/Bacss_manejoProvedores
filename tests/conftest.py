@@ -15,6 +15,7 @@ def entorno(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAVE_SESION", "clave-de-sesion-solo-para-pruebas-0123456789")
     monkeypatch.setenv("COOKIE_SEGURA", "false")
     monkeypatch.setenv("TAREAS_ACTIVAS", "false")
+    monkeypatch.setenv("FACTURACION_ACTIVA", "true")
     monkeypatch.setenv("CORREO_ACTIVO", "false")
     monkeypatch.setenv("RESPALDOS_CONSERVAR", "30")
     monkeypatch.setenv("ZONA_HORARIA", "America/Guayaquil")

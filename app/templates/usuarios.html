@@ -6,7 +6,7 @@
 <div class="tarjeta">
   <h2>Perfiles</h2>
   <ul style="margin:0; padding-left:1.2rem">
-    <li><strong>Creador:</strong> registra y edita proveedores, registra facturas, las marca como pagadas y genera el archivo de pago.</li>
+    <li><strong>Creador:</strong> registra y edita proveedores{% if facturacion %}, registra facturas, las marca como pagadas y genera el archivo de pago{% endif %}.</li>
     <li><strong>Aprobador:</strong> consulta todo y aprueba o rechaza proveedores. No puede modificarlos.</li>
     <li><strong>Administrador:</strong> todo lo anterior, más usuarios, catálogos y configuración.</li>
   </ul>
@@ -29,7 +29,7 @@
           </select>
         </td>
         <td><input type="checkbox" form="usuario-{{ x.id }}" name="activo" value="1" {{ 'checked' if x.activo }} aria-label="Activo"></td>
-        <td><input type="password" form="usuario-{{ x.id }}" name="clave" placeholder="(sin cambio)" minlength="8" autocomplete="new-password" aria-label="Nueva contraseña"></td>
+        <td><input type="password" data-ojo form="usuario-{{ x.id }}" name="clave" placeholder="(sin cambio)" minlength="8" autocomplete="new-password" aria-label="Nueva contraseña"></td>
         <td>
           <form method="post" action="/usuarios/{{ x.id }}" id="usuario-{{ x.id }}" class="en-linea">
             <input type="hidden" name="csrf_token" value="{{ csrf }}">
@@ -66,7 +66,7 @@
       </div>
       <div>
         <label for="nuevo-clave">Contraseña inicial</label>
-        <input type="password" id="nuevo-clave" name="clave" minlength="8" autocomplete="new-password" required>
+        <input type="password" data-ojo id="nuevo-clave" name="clave" minlength="8" autocomplete="new-password" required>
         <div class="ayuda">Mínimo 8 caracteres. La persona puede cambiarla en «Mi contraseña».</div>
       </div>
     </div>

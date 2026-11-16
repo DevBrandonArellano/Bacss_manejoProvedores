@@ -9,7 +9,10 @@
   </div>
 </div>
 
-<form method="get" action="/proveedores" class="filtros" id="filtros">
+<form method="get" action="/proveedores" class="filtros" id="filtros" hx-get="/proveedores" hx-target="#tabla-proveedores" hx-trigger="buscar">
+  <input type="hidden" name="orden" value="{{ filtros.orden }}">
+  <input type="hidden" name="dir" value="{{ filtros.dir }}">
+  <input type="hidden" name="pagina" value="1">
   <div class="crece">
     <label for="q">Buscar</label>
     <input type="search" id="q" name="q" value="{{ filtros.q }}" placeholder="Nombre, identificación, cuenta o banco"

@@ -107,4 +107,66 @@ dl.datos dd { margin: 0; }
 .cambio .despues { color: var(--ok); font-weight: 600; }
 .separador { border: none; border-top: 1px solid var(--borde); margin: 1rem 0; }
 .pie { text-align: center; color: var(--suave); font-size: .8rem; padding: 1rem; }
+
+/* ---- accesibilidad: foco visible con teclado ---- */
+:focus-visible { outline: 3px solid #8fb4d8; outline-offset: 2px; }
+
+/* ---- buscador sobre listas largas (bancos, proveedores) ---- */
+.combo { position: relative; }
+.combo-lista { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 2px); max-height: 18rem; overflow-y: auto; margin: 0; padding: .25rem 0; list-style: none; background: #fff; border: 1px solid var(--marca); border-radius: 5px; box-shadow: 0 6px 18px rgba(20, 40, 70, .18); }
+.combo-lista li { padding: .4rem .65rem; cursor: pointer; }
+.combo-lista li[role=option]:hover, .combo-lista li.activa { background: #e3eefa; }
+.combo-lista li[aria-selected=true] { font-weight: 700; }
+.combo-lista li.combo-titulo { cursor: default; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; color: var(--suave); padding: .35rem .65rem .15rem; }
+
+/* ---- validación mientras se escribe ---- */
+.ayuda-error { font-size: .85rem; color: var(--error); margin-top: .2rem; }
+input.con-error { border-color: var(--error); background: #fff8f8; }
+[hidden] { display: none !important; }
+
+/* ---- avisos con cierre ---- */
+.aviso { position: relative; transition: opacity .35s; }
+.aviso[data-cerrable] { padding-right: 2.2rem; }
+.aviso.saliendo { opacity: 0; }
+.aviso-cerrar { position: absolute; top: .3rem; right: .4rem; padding: 0 .4rem; line-height: 1.3; font-size: 1.2rem; background: transparent; border: none; color: inherit; opacity: .7; }
+.aviso-cerrar:hover { background: transparent; opacity: 1; }
+
+/* ---- menús desplegables de la barra ---- */
+details.menu { position: relative; }
+details.menu > summary { list-style: none; cursor: pointer; color: #dce8f3; padding: .35rem .65rem; border-radius: 4px; white-space: nowrap; user-select: none; }
+details.menu > summary::-webkit-details-marker { display: none; }
+details.menu > summary::after { content: " ▾"; font-size: .8em; }
+details.menu > summary:hover, details.menu[open] > summary, details.menu.activo > summary { background: var(--marca-oscura); color: #fff; }
+.menu-lista { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 12rem; background: #fff; border: 1px solid var(--borde); border-radius: 6px; box-shadow: 0 6px 18px rgba(20, 40, 70, .2); padding: .3rem; display: flex; flex-direction: column; }
+.barra .menu-lista a { color: var(--texto); padding: .4rem .6rem; border-radius: 4px; text-decoration: none; }
+.barra .menu-lista a:hover, .barra .menu-lista a.activo { background: #e3eefa; color: var(--marca); }
+
+/* ---- listados ---- */
+th a.orden { color: inherit; text-decoration: none; }
+th a.orden:hover { color: var(--marca); text-decoration: underline; }
+.pie-lista { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: 1rem; }
+.paginacion { display: flex; align-items: center; gap: .6rem; }
+.guia { text-align: center; padding: 2rem 1.25rem; }
+.guia h2 { margin-bottom: .4rem; }
+.enlace-tarjeta { display: block; color: inherit; text-decoration: none; margin-bottom: 0; }
+.enlace-tarjeta:hover { box-shadow: 0 2px 10px rgba(20, 40, 70, .12); }
+.enlace-tarjeta .cifra { font-size: 1.55rem; margin: .15rem 0; }
+
+/* ---- barra de selección de facturas ---- */
+.barra-seleccion { position: sticky; bottom: 0; z-index: 10; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .6rem; margin: 0 0 1rem; padding: .65rem 1rem; background: #fff; border: 1px solid var(--borde); border-radius: 8px; box-shadow: 0 -2px 10px rgba(20, 40, 70, .08); }
+.barra-seleccion.con-seleccion { border-color: var(--marca); background: #eef5fc; }
+.barra-seleccion.con-seleccion [data-cuenta] { color: var(--texto); font-weight: 600; }
+
+/* ---- ojito de contraseña ---- */
+.campo-clave { position: relative; }
+.campo-clave input { padding-right: 2.6rem; }
+.campo-clave .ojo { position: absolute; top: 50%; right: .25rem; transform: translateY(-50%); display: flex; align-items: center; padding: .3rem .4rem; background: transparent; border: none; border-radius: 4px; color: var(--suave); }
+.campo-clave .ojo:hover { background: var(--gris-fondo); color: var(--marca); }
+.campo-clave .ojo[aria-pressed=true] { color: var(--marca); }
+
+/* ---- vista previa del vencimiento ---- */
+.vencimiento { display: flex; flex-wrap: wrap; gap: .3rem .6rem; align-items: baseline; background: #eef5fc; border: 1px solid #c5d9ee; border-radius: 6px; padding: .55rem .8rem; }
+.vencimiento strong { font-size: 1.05rem; }
+.vencimiento-pasado { background: var(--error-fondo); border-color: #f0b9b9; }
+
 @media (max-width: 700px) { .contenido { padding: .75rem; } dl.datos { grid-template-columns: 1fr; } }

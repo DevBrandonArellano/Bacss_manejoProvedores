@@ -32,30 +32,37 @@
         </div>
         <div>
           <label for="tipo_id_id">Tipo de ID</label>
-          <select id="tipo_id_id" name="tipo_id_id">
+          <select id="tipo_id_id" name="tipo_id_id"
+                  hx-get="/proveedores/verificar" hx-trigger="change" hx-target="#verificacion"
+                  hx-include="#tipo_id_id, #numero_id, #numero_cuenta"{% if p %} hx-vals='{"pid": "{{ p.id }}"}'{% endif %}>
             <option value="">— Sin definir —</option>
             {% for t in tipos_id %}
-            <option value="{{ t.id }}" {{ 'selected' if datos.tipo_id_id == t.id }}>{{ t.nombre }}</option>
+            <option value="{{ t.id }}" data-largo="{{ largos_id.get(t.codigo, '') }}" {{ 'selected' if datos.tipo_id_id == t.id }}>{{ t.nombre }}</option>
             {% endfor %}
           </select>
         </div>
         <div>
           <label for="numero_id">Número de ID</label>
-          <input type="text" id="numero_id" name="numero_id" value="{{ datos.numero_id or '' }}" maxlength="30" inputmode="numeric" class="mono">
+          <input type="text" id="numero_id" name="numero_id" value="{{ datos.numero_id or '' }}" maxlength="30" inputmode="numeric" class="mono"
+                 data-validar="id" data-tipo="tipo_id_id"
+                 hx-get="/proveedores/verificar" hx-trigger="change, keyup changed delay:600ms" hx-target="#verificacion"
+                 hx-include="#tipo_id_id, #numero_id, #numero_cuenta"{% if p %} hx-vals='{"pid": "{{ p.id }}"}'{% endif %}>
           <div class="ayuda">Cédula: 10 dígitos. RUC: 13 dígitos. Se guarda como texto, con sus ceros a la izquierda.</div>
         </div>
       </div>
     </div>
+
+    <div id="verificacion" aria-live="polite"></div>
 
     <div class="tarjeta">
       <h2>Datos bancarios</h2>
       <div class="rejilla">
         <div class="ancho-total">
           <label for="banco_id">Banco</label>
-          <select id="banco_id" name="banco_id">
+          <select id="banco_id" name="banco_id" data-buscar="Escriba el nombre del banco…">
             <option value="">— Sin definir —</option>
             {% for b in bancos %}
-            <option value="{{ b.id }}" {{ 'selected' if datos.banco_id == b.id }}>{{ b.nombre }} (código {{ b.codigo }})</option>
+            <option value="{{ b.id }}" data-frecuente="{{ 1 if b.id in bancos_frecuentes else 0 }}" {{ 'selected' if datos.banco_id == b.id }}>{{ b.nombre }} (código {{ b.codigo }})</option>
             {% endfor %}
           </select>
         </div>
@@ -70,7 +77,9 @@
         </div>
         <div>
           <label for="numero_cuenta">Número de cuenta</label>
-          <input type="text" id="numero_cuenta" name="numero_cuenta" value="{{ datos.numero_cuenta or '' }}" maxlength="40" inputmode="numeric" class="mono">
+          <input type="text" id="numero_cuenta" name="numero_cuenta" value="{{ datos.numero_cuenta or '' }}" maxlength="40" inputmode="numeric" class="mono"
+                 hx-get="/proveedores/verificar" hx-trigger="change, keyup changed delay:600ms" hx-target="#verificacion"
+                 hx-include="#tipo_id_id, #numero_id, #numero_cuenta"{% if p %} hx-vals='{"pid": "{{ p.id }}"}'{% endif %}>
           <div class="ayuda">Se guarda como texto, con sus ceros a la izquierda.</div>
         </div>
         <div class="ancho-total">
@@ -87,7 +96,7 @@
       <div class="rejilla">
         <div class="ancho-total">
           <label for="correo">Correo</label>
-          <input type="text" id="correo" name="correo" value="{{ datos.correo or '' }}" maxlength="250">
+          <input type="text" id="correo" name="correo" value="{{ datos.correo or '' }}" maxlength="250" data-validar="correo" inputmode="email">
           <div class="ayuda">Si son varios, sepárelos con punto y coma.</div>
         </div>
         <div>
@@ -100,17 +109,17 @@
             <option value="dia_fijo" {{ 'selected' if opcion_credito == 'dia_fijo' }}>Día fijo de cada mes</option>
           </select>
         </div>
-        <div>
+        <div data-mostrar-si="credito=dias">
           <label for="credito_dias">Días de crédito</label>
           <input type="number" id="credito_dias" name="credito_dias" min="0" max="365"
                  value="{{ datos.credito_valor if opcion_credito == 'dias' and datos.credito_valor is not none else '' }}">
-          <div class="ayuda">Solo si eligió «Días desde la factura».</div>
+          <div class="ayuda">Cuántos días después de la fecha de la factura vence el pago.</div>
         </div>
-        <div>
+        <div data-mostrar-si="credito=dia_fijo">
           <label for="credito_dia">Día del mes</label>
           <input type="number" id="credito_dia" name="credito_dia" min="1" max="31"
                  value="{{ datos.credito_valor if opcion_credito == 'dia_fijo' and datos.credito_valor is not none else '' }}">
-          <div class="ayuda">Solo si eligió «Día fijo de cada mes».</div>
+          <div class="ayuda">Si la factura es posterior a ese día, vence el mes siguiente.</div>
         </div>
         <div class="ancho-total">
           <label for="notas">Notas</label>

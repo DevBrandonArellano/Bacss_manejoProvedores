@@ -1,7 +1,7 @@
 """Proveedores: listado, búsqueda, alta, edición, desactivación y exportación."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .. import config, credito, exportacion, servicios, validaciones
@@ -21,7 +21,17 @@ def _proveedor(sesion: Session, pid: int) -> Proveedor:
     return p
 
 
-def _filtrar(sesion: Session, q: str, banco: str, aprobacion: str, estado: str, registrado: str):
+POR_PAGINA = 50
+# Columnas por las que se puede ordenar el listado.
+ORDENES = {
+    "nombre": Proveedor.nombre_norm,
+    "identificacion": Proveedor.numero_id,
+    "banco": Banco.nombre_norm,
+    "aprobacion": Proveedor.estado_aprobacion,
+}
+
+
+def _consulta(q: str, banco: str, aprobacion: str, estado: str, registrado: str, orden: str = "nombre", dir: str = "asc"):
     consulta = select(Proveedor).outerjoin(Banco, Proveedor.banco_id == Banco.id)
     texto = (q or "").strip()
     if texto:
@@ -48,7 +58,25 @@ def _filtrar(sesion: Session, q: str, banco: str, aprobacion: str, estado: str, 
         consulta = consulta.where(Proveedor.registrado_banco.is_(True))
     elif registrado == "no":
         consulta = consulta.where(Proveedor.registrado_banco.is_(False))
-    return sesion.scalars(consulta.order_by(Proveedor.nombre_norm)).all()
+    columna = ORDENES.get(orden, Proveedor.nombre_norm)
+    # Los vacíos siempre al final; a igualdad, por nombre.
+    return consulta.order_by(columna.is_(None), columna.desc() if dir == "desc" else columna, Proveedor.nombre_norm)
+
+
+def _filtrar(sesion: Session, q: str, banco: str, aprobacion: str, estado: str, registrado: str, orden="nombre", dir="asc"):
+    return sesion.scalars(_consulta(q, banco, aprobacion, estado, registrado, orden, dir)).all()
+
+
+def _bancos_frecuentes(sesion: Session, limite: int = 8) -> set:
+    """Ids de los bancos con más proveedores: se muestran primero en el buscador de bancos."""
+    filas = sesion.execute(
+        select(Proveedor.banco_id, func.count())
+        .where(Proveedor.banco_id.is_not(None))
+        .group_by(Proveedor.banco_id)
+        .order_by(func.count().desc())
+        .limit(limite)
+    ).all()
+    return {banco_id for banco_id, _ in filas}
 
 
 def _opciones(sesion: Session, p: Proveedor = None) -> dict:
@@ -66,6 +94,8 @@ def _opciones(sesion: Session, p: Proveedor = None) -> dict:
         "tipos_id": lista(TipoId, p.tipo_id_id if p else None, TipoId.nombre),
         "tipos_cuenta": lista(TipoCuenta, p.tipo_cuenta_id if p else None, TipoCuenta.nombre),
         "bancos": lista(Banco, p.banco_id if p else None, Banco.nombre),
+        "bancos_frecuentes": _bancos_frecuentes(sesion),
+        "largos_id": servicios.LARGO_ID,
     }
 
 
@@ -140,17 +170,39 @@ def listado(
     aprobacion: str = "",
     estado: str = "activos",
     registrado: str = "",
+    orden: str = "nombre",
+    dir: str = "asc",
+    pagina: str = "1",
     u: Usuario = Depends(usuario_actual),
     sesion: Session = Depends(get_db),
 ):
-    proveedores = _filtrar(sesion, q, banco, aprobacion, estado, registrado)
-    filtros = {"q": q, "banco": banco, "aprobacion": aprobacion, "estado": estado, "registrado": registrado}
+    orden = orden if orden in ORDENES else "nombre"
+    dir = "desc" if dir == "desc" else "asc"
+    consulta = _consulta(q, banco, aprobacion, estado, registrado, orden, dir)
+    total = sesion.scalar(select(func.count()).select_from(consulta.subquery())) or 0
+    paginas = max(1, -(-total // POR_PAGINA))
+    actual = min(max(entero(pagina) or 1, 1), paginas)
+    proveedores = sesion.scalars(consulta.offset((actual - 1) * POR_PAGINA).limit(POR_PAGINA)).all()
+    filtros = {
+        "q": q, "banco": banco, "aprobacion": aprobacion, "estado": estado, "registrado": registrado,
+        "orden": orden, "dir": dir,
+    }
+    contexto = {
+        "proveedores": proveedores,
+        "filtros": filtros,
+        "total": total,
+        "pagina": actual,
+        "paginas": paginas,
+        "desde": (actual - 1) * POR_PAGINA + 1 if total else 0,
+        "hasta": min(actual * POR_PAGINA, total),
+        "hay_proveedores": total > 0 or sesion.scalar(select(func.count(Proveedor.id))) > 0,
+    }
     if es_htmx(request):
-        return render(request, "_proveedores_tabla.html", proveedores=proveedores)
+        return render(request, "_proveedores_tabla.html", **contexto)
     bancos_usados = sesion.scalars(
         select(Banco).where(Banco.id.in_(select(Proveedor.banco_id).where(Proveedor.banco_id.is_not(None)))).order_by(Banco.nombre)
     ).all()
-    return render(request, "proveedores.html", proveedores=proveedores, filtros=filtros, bancos_usados=bancos_usados)
+    return render(request, "proveedores.html", bancos_usados=bancos_usados, **contexto)
 
 
 @router.get("/proveedores/exportar")
@@ -160,13 +212,48 @@ def exportar(
     aprobacion: str = "",
     estado: str = "activos",
     registrado: str = "",
+    orden: str = "nombre",
+    dir: str = "asc",
     u: Usuario = Depends(usuario_actual),
     sesion: Session = Depends(get_db),
 ):
-    proveedores = _filtrar(sesion, q, banco, aprobacion, estado, registrado)
+    proveedores = _filtrar(sesion, q, banco, aprobacion, estado, registrado, orden, dir)
     contenido = exportacion.a_bytes(exportacion.libro_proveedores(proveedores))
     nombre = f"proveedores-{config.ahora():%Y%m%d-%H%M}.xlsx"
     return Response(contenido, media_type=XLSX, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
+@router.get("/proveedores/verificar")
+def verificar(
+    request: Request,
+    tipo_id_id: str = "",
+    numero_id: str = "",
+    numero_cuenta: str = "",
+    pid: str = "",
+    u: Usuario = Depends(puede_editar),
+    sesion: Session = Depends(get_db),
+):
+    """Avisos mientras se llena el formulario: identificación o cuenta que ya tiene otro proveedor."""
+    otro = entero(pid)
+    avisos = []
+    tipo = sesion.get(TipoId, entero(tipo_id_id)) if entero(tipo_id_id) else None
+    numero_id = servicios.sin_espacios(numero_id)
+    if tipo is not None and numero_id:
+        consulta = select(Proveedor).where(Proveedor.tipo_id_id == tipo.id, Proveedor.numero_id == numero_id)
+        if otro is not None:
+            consulta = consulta.where(Proveedor.id != otro)
+        repetido = sesion.scalars(consulta).first()
+        if repetido is not None:
+            avisos.append(("error", f"Ya existe un proveedor con ese {tipo.nombre}", repetido))
+    numero_cuenta = servicios.sin_espacios(numero_cuenta)
+    if numero_cuenta:
+        consulta = select(Proveedor).where(Proveedor.numero_cuenta == numero_cuenta)
+        if otro is not None:
+            consulta = consulta.where(Proveedor.id != otro)
+        misma = sesion.scalars(consulta).first()
+        if misma is not None:
+            avisos.append(("alerta", "Ese número de cuenta ya lo tiene otro proveedor", misma))
+    return render(request, "_verificacion.html", avisos=avisos)
 
 
 @router.get("/proveedores/nuevo")
@@ -192,9 +279,11 @@ def ficha(request: Request, pid: int, u: Usuario = Depends(usuario_actual), sesi
     historial = sesion.scalars(
         select(Historial).where(Historial.proveedor_id == p.id).order_by(Historial.fecha.desc(), Historial.id.desc()).limit(300)
     ).all()
-    facturas = sesion.scalars(
-        select(Factura).where(Factura.proveedor_id == p.id).order_by(Factura.vencimiento.desc(), Factura.id.desc()).limit(200)
-    ).all()
+    facturas = []
+    if config.actual.facturacion_activa:
+        facturas = sesion.scalars(
+            select(Factura).where(Factura.proveedor_id == p.id).order_by(Factura.vencimiento.desc(), Factura.id.desc()).limit(200)
+        ).all()
     return render(
         request,
         "proveedor_ficha.html",

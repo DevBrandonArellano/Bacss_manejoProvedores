@@ -1,9 +1,26 @@
+{% macro cab(clave, texto) %}
+{% set activa = filtros.orden == clave %}
+{% set nueva = "desc" if activa and filtros.dir == "asc" else "asc" %}
+<th aria-sort="{{ (("ascending" if filtros.dir == "asc" else "descending") if activa else "none") }}">
+  <a class="orden" href="{{ url_con('/proveedores', filtros, orden=clave, dir=nueva, pagina=1) }}"
+     data-orden="{{ clave }}" data-dir="{{ nueva }}" data-pagina="1">{{ texto }}{% if activa %} <span aria-hidden="true">{{ "▲" if filtros.dir == "asc" else "▼" }}</span>{% endif %}</a>
+</th>
+{% endmacro %}
+
+{% if not hay_proveedores %}
+<div class="tarjeta guia">
+  <h2>Aún no hay proveedores</h2>
+  <p class="suave">Aquí se llevan los datos de identificación, bancarios y de crédito de cada proveedor.
+    Cada proveedor nuevo debe ser aprobado por otra persona antes de poder pagarle.</p>
+  {% if usuario.puede_editar %}<a class="boton" href="/proveedores/nuevo">Registrar el primer proveedor</a>{% endif %}
+</div>
+{% else %}
 <div class="tabla-envoltura">
   <table>
     <thead>
       <tr>
-        <th>Nombre</th><th>Identificación</th><th>Banco</th><th>Cuenta</th><th>Crédito</th>
-        <th>Registrado en banco</th><th>Aprobación</th>
+        {{ cab("nombre", "Nombre") }}{{ cab("identificacion", "Identificación") }}{{ cab("banco", "Banco") }}<th>Cuenta</th><th>Crédito</th>
+        <th>Registrado en banco</th>{{ cab("aprobacion", "Aprobación") }}
       </tr>
     </thead>
     <tbody>
@@ -21,9 +38,22 @@
         <td><span class="insignia insignia-{{ p.estado_aprobacion }}">{{ p.estado_texto }}</span></td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="vacio">No hay proveedores que coincidan.</td></tr>
+      <tr><td colspan="7" class="vacio">No hay proveedores que coincidan.
+        <div><a href="/proveedores">Quitar los filtros</a></div></td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
-<p class="suave">{{ proveedores|length }} proveedor{{ "es" if proveedores|length != 1 }}.</p>
+<div class="pie-lista">
+  <span class="suave">
+    {% if total %}Mostrando {{ desde }}–{{ hasta }} de {{ total }} proveedor{{ "es" if total != 1 }}.{% else %}0 proveedores.{% endif %}
+  </span>
+  {% if paginas > 1 %}
+  <nav class="paginacion" aria-label="Páginas">
+    {% if pagina > 1 %}<a class="boton boton-claro boton-chico" href="{{ url_con('/proveedores', filtros, pagina=pagina - 1) }}" data-pagina="{{ pagina - 1 }}">← Anterior</a>{% endif %}
+    <span>Página {{ pagina }} de {{ paginas }}</span>
+    {% if pagina < paginas %}<a class="boton boton-claro boton-chico" href="{{ url_con('/proveedores', filtros, pagina=pagina + 1) }}" data-pagina="{{ pagina + 1 }}">Siguiente →</a>{% endif %}
+  </nav>
+  {% endif %}
+</div>
+{% endif %}

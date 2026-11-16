@@ -11,7 +11,7 @@
     <a class="boton boton-claro" href="/proveedores">Volver al listado</a>
     {% if usuario.puede_editar %}
     <a class="boton" href="/proveedores/{{ p.id }}/editar">Editar</a>
-    {% if p.activo %}<a class="boton boton-claro" href="/facturas/nueva?proveedor={{ p.id }}">Registrar factura</a>{% endif %}
+    {% if facturacion and p.activo %}<a class="boton boton-claro" href="/facturas/nueva?proveedor={{ p.id }}">Registrar factura</a>{% endif %}
     <form method="post" action="/proveedores/{{ p.id }}/activo" class="en-linea">
       <input type="hidden" name="csrf_token" value="{{ csrf }}">
       {% if p.activo %}
@@ -33,7 +33,7 @@
 </div>
 {% elif p.estado_aprobacion == "pendiente" %}
 <div class="aviso aviso-alerta">
-  Pendiente de aprobación. Mientras no se apruebe, sus facturas no pueden incluirse en el archivo de pago.
+  Pendiente de aprobación.{% if facturacion %} Mientras no se apruebe, sus facturas no pueden incluirse en el archivo de pago.{% endif %}
   {% if usuario.puede_aprobar and bloqueo_aprobar %}<br>{{ bloqueo_aprobar }}{% endif %}
 </div>
 {% if usuario.puede_aprobar and not bloqueo_aprobar %}
@@ -102,6 +102,7 @@
 </div>
 {% endif %}
 
+{% if facturacion %}
 <h2>Facturas</h2>
 <div class="tabla-envoltura">
   <table>
@@ -125,6 +126,8 @@
     </tbody>
   </table>
 </div>
+
+{% endif %}
 
 <h2>Historial de cambios</h2>
 <div class="tabla-envoltura">

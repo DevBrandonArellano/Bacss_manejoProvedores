@@ -18,8 +18,8 @@
 
 <p class="suave">
   Un proveedor nuevo, o uno al que se le cambió el nombre, la identificación, la cuenta o el banco, queda pendiente
-  hasta que lo apruebe una persona distinta de quien lo creó o lo modificó por última vez.
-  Mientras tanto sus facturas no pueden salir en el archivo de pago.
+  hasta que lo apruebe una persona distinta de quien lo creó o lo modificó por última vez.{% if facturacion %}
+  Mientras tanto sus facturas no pueden salir en el archivo de pago.{% endif %}
 </p>
 
 {% for t in tarjetas %}

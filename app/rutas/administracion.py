@@ -11,7 +11,7 @@ from .. import catalogos, config, servicios, tareas, validaciones
 from ..db import get_db
 from ..modelos import ROLES, Banco, Historial, Proveedor, TipoCuenta, TipoId, Usuario
 from ..servicios import ErrorNegocio
-from ..web import aviso, entero, es_htmx, ir, render, solo_admin, usuario_actual
+from ..web import aviso, entero, es_htmx, ir, render, requiere_facturacion, solo_admin, usuario_actual
 
 router = APIRouter()
 
@@ -269,7 +269,7 @@ def pantalla_configuracion(request: Request, u: Usuario = Depends(solo_admin), s
     return _pantalla_configuracion(request, sesion)
 
 
-@router.post("/configuracion")
+@router.post("/configuracion", dependencies=[Depends(requiere_facturacion)])
 async def guardar_configuracion(request: Request, u: Usuario = Depends(solo_admin), sesion: Session = Depends(get_db)):
     formulario = await request.form()
     dias = entero(formulario.get("dias_aviso"))
@@ -296,7 +296,7 @@ def respaldar_ahora(request: Request, u: Usuario = Depends(solo_admin)):
     return ir("/configuracion")
 
 
-@router.post("/configuracion/revisar-alarmas")
+@router.post("/configuracion/revisar-alarmas", dependencies=[Depends(requiere_facturacion)])
 def revisar_ahora(request: Request, u: Usuario = Depends(solo_admin)):
     try:
         tareas.revisar_alarmas()

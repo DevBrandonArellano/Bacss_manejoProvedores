@@ -9,16 +9,16 @@
       <input type="hidden" name="csrf_token" value="{{ csrf }}">
       <p>
         <label for="actual">Contraseña actual</label>
-        <input type="password" id="actual" name="actual" required>
+        <input type="password" data-ojo id="actual" name="actual" required>
       </p>
       <p>
         <label for="nueva">Contraseña nueva</label>
-        <input type="password" id="nueva" name="nueva" minlength="8" required>
+        <input type="password" data-ojo id="nueva" name="nueva" minlength="8" required>
         <span class="ayuda">Mínimo 8 caracteres.</span>
       </p>
       <p>
         <label for="repetida">Repita la contraseña nueva</label>
-        <input type="password" id="repetida" name="repetida" minlength="8" required>
+        <input type="password" data-ojo id="repetida" name="repetida" minlength="8" required>
       </p>
       <button type="submit">Guardar</button>
       <a class="boton boton-claro" href="/">Cancelar</a>

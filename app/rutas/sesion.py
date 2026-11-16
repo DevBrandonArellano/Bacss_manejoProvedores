@@ -84,6 +84,8 @@ async def cambiar_clave(request: Request, u: Usuario = Depends(usuario_actual), 
 
 @router.get("/")
 def panel(request: Request, dias: str = "", u: Usuario = Depends(usuario_actual), sesion: Session = Depends(get_db)):
+    if not config.actual.facturacion_activa:
+        return ir("/proveedores")
     configurado = servicios.dias_aviso(sesion)
     elegido = entero(dias)
     n = configurado if elegido is None else max(0, min(elegido, 365))

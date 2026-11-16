@@ -2,7 +2,7 @@
 
 Aplicación web para llevar el control de proveedores (identificación, datos bancarios, condición de crédito), registrar facturas, avisar de vencimientos y generar el archivo de pago masivo al banco. Interfaz en español. Python 3.11 + FastAPI + Jinja2 + HTMX + SQLite, en un solo contenedor.
 
-> **Estado:** el código está escrito pero todavía no se ha ejecutado de punta a punta. Ver `CHANGELOG.md` y la sección «Primera prueba» más abajo.
+> **Estado:** probada en Docker (Linux) el 2026-11-16: imagen construida, 154 pruebas pasan, recorrido completo por HTTP y recorrido de pantallas en Firefox verificados. Falta repetirlo en la máquina Windows de destino. Ver `CHANGELOG.md`.
 
 ## Requisitos
 
@@ -31,6 +31,14 @@ La app reinicia sola con el equipo (`restart: unless-stopped`). Arranca **vacía
 
 Flujo de aprobación: un proveedor nuevo queda *Pendiente*; si se cambian sus datos bancarios o de identificación vuelve a *Pendiente*; nadie aprueba lo que él mismo creó o modificó; solo los proveedores aprobados entran en el pago masivo.
 
+## Facturas (apagadas por ahora)
+
+Por ahora la app solo registra proveedores. Las facturas, el panel de pagos, las alarmas de vencimiento y el archivo de pago masivo están **ocultos, no eliminados**: se controlan con `FACTURACION_ACTIVA` en `.env` (por defecto `false`).
+
+- Apagado: no aparecen «Panel» ni «Facturas» en el menú, el inicio es la lista de proveedores, y las direcciones `/facturas…` responden «no existe». La tarea diaria solo hace el respaldo.
+- Para volver a usarlas: poner `FACTURACION_ACTIVA=true` en `.env` y ejecutar `docker compose up -d` (no basta `restart`). Los datos de facturas que ya existan en la base se conservan.
+- Las condiciones de crédito de cada proveedor se siguen guardando.
+
 ## Alarmas
 
 El panel inicial muestra facturas vencidas, que vencen hoy y las de los próximos N días. El vencimiento se calcula con la condición de crédito del proveedor (N días, fin de mes o día fijo del mes). El envío por correo existe pero está apagado: se activa con `CORREO_ACTIVO=true` y los datos `SMTP_*` en `.env`.
@@ -55,11 +63,12 @@ docker compose exec app python -m app.cli cargar-catalogos [ruta.xlsx]
 - La base de datos vive en el volumen de Docker `bd` (`/bd/proveedores.db`).
 - **Restaurar:**
   1. `docker compose stop app`
-  2. Copiar el respaldo elegido sobre `/bd/proveedores.db` del volumen, por ejemplo:
-     `docker compose run --rm -v "%cd%/respaldos:/respaldos" app cp /respaldos/proveedores-AAAAMMDD-HHMMSS.db /bd/proveedores.db`
+  2. Borrar los archivos auxiliares de SQLite y copiar el respaldo elegido sobre `/bd/proveedores.db` del volumen, por ejemplo:
+     `docker compose run --rm -v "%cd%/respaldos:/respaldos" app sh -c "rm -f /bd/proveedores.db-wal /bd/proveedores.db-shm && cp /respaldos/proveedores-AAAAMMDD-HHMMSS.db /bd/proveedores.db"`
+     (los `-wal` y `-shm` de la base anterior no deben quedar junto a la restaurada)
   3. `docker compose up -d`
 
-  (Procedimiento sin probar todavía; verifíquelo en la primera prueba.)
+  En Linux/macOS use `"$(pwd)/respaldos:/respaldos"` en lugar de `"%cd%/respaldos:/respaldos"` (este último es para `cmd` de Windows). Procedimiento probado en Linux.
 
 ## Actualizar
 
