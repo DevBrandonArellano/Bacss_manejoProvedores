@@ -13,7 +13,10 @@
 {% if usuario %}
 <header class="barra">
   <a class="marca" href="/">Manejo de Proveedores</a>
-  <nav>
+  <button type="button" class="hamburguesa" aria-expanded="false" aria-controls="navegacion" data-menu-movil>
+    <span aria-hidden="true">☰</span> Menú
+  </button>
+  <nav id="navegacion" class="navegacion">
     {% if facturacion %}<a href="/" class="{{ 'activo' if ruta_actual == '/' }}">Panel</a>{% endif %}
     <a href="/proveedores" class="{{ 'activo' if ruta_actual.startswith('/proveedores') }}">Proveedores</a>
     {% if facturacion %}<a href="/facturas" class="{{ 'activo' if ruta_actual.startswith('/facturas') }}">Facturas</a>{% endif %}
@@ -38,7 +41,7 @@
     </details>
     {% endif %}
   </nav>
-  <div class="quien">
+  <div class="quien navegacion">
     <span>{{ usuario.nombre }} · {{ usuario.rol_texto }}</span>
     <a href="/mi-clave">Mi contraseña</a>
     <form method="post" action="/salir">

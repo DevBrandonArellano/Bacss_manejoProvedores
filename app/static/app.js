@@ -4,6 +4,7 @@
  */
 (function () {
   "use strict";
+  document.documentElement.classList.add("js");
 
   var normalizar = function (texto) {
     return (texto || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -297,8 +298,24 @@
   }
 
   // ------------------------------------------------------------------ inicio y delegación de eventos
+  // Tablas en pantallas angostas: cada fila pasa a ser una tarjeta; la etiqueta de cada dato sale del encabezado.
+  function etiquetarTablas(raiz) {
+    raiz.querySelectorAll(".tabla-envoltura table").forEach(function (tabla) {
+      var cabecera = tabla.querySelectorAll("thead th");
+      if (!cabecera.length) return;
+      var textos = Array.prototype.map.call(cabecera, function (th) { return th.textContent.replace(/[▲▼]/g, "").trim(); });
+      tabla.querySelectorAll("tbody tr").forEach(function (fila) {
+        Array.prototype.forEach.call(fila.children, function (celda, i) {
+          if (textos[i] && celda.colSpan === 1) celda.setAttribute("data-et", textos[i]);
+        });
+      });
+      tabla.classList.add("apilable");
+    });
+  }
+
   function iniciar(raiz) {
     raiz = raiz || document;
+    etiquetarTablas(raiz);
     raiz.querySelectorAll("input[data-ojo]").forEach(ojo);
     raiz.querySelectorAll("select[data-buscar]").forEach(combobox);
     actualizarCondicionales(raiz);
@@ -354,6 +371,12 @@
   });
 
   document.addEventListener("click", function (e) {
+    var menu = e.target.closest ? e.target.closest("[data-menu-movil]") : null;
+    if (menu) {
+      var abierto = menu.getAttribute("aria-expanded") !== "true";
+      menu.setAttribute("aria-expanded", abierto ? "true" : "false");
+      document.querySelector(".barra").classList.toggle("menu-abierto", abierto);
+    }
     var t = e.target.closest ? e.target.closest("[data-confirmar], [data-orden], [data-pagina]") : null;
     if (t && t.dataset.confirmar && !window.confirm(t.dataset.confirmar)) {
       e.preventDefault();
