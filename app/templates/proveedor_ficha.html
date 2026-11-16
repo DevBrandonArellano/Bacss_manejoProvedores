@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block titulo %}{{ p.nombre }}{% endblock %}
+{% block contenido %}
+<div class="cabecera">
+  <div>
+    <h1>{{ p.nombre }}</h1>
+    <span class="insignia insignia-{{ p.estado_aprobacion }}">{{ p.estado_texto }}</span>
+    {% if not p.activo %}<span class="insignia">Desactivado</span>{% endif %}
+  </div>
+  <div class="acciones">
+    <a class="boton boton-claro" href="/proveedores">Volver al listado</a>
+    {% if usuario.puede_editar %}
+    <a class="boton" href="/proveedores/{{ p.id }}/editar">Editar</a>
+    {% if p.activo %}<a class="boton boton-claro" href="/facturas/nueva?proveedor={{ p.id }}">Registrar factura</a>{% endif %}
+    <form method="post" action="/proveedores/{{ p.id }}/activo" class="en-linea">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      {% if p.activo %}
+      <input type="hidden" name="activo" value="0">
+      <button type="submit" class="boton-peligro" onclick="return confirm('¿Desactivar este proveedor? No se borra; se puede reactivar.')">Desactivar</button>
+      {% else %}
+      <input type="hidden" name="activo" value="1">
+      <button type="submit" class="boton-claro">Reactivar</button>
+      {% endif %}
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if p.estado_aprobacion == "rechazado" %}
+<div class="aviso aviso-error">
+  Rechazado por {{ p.aprobado_por.nombre if p.aprobado_por else "—" }} el {{ p.aprobado_en|fechahora }}.
+  Motivo: {{ p.motivo_rechazo }}. Al corregirlo y guardar volverá a quedar pendiente.
+</div>
+{% elif p.estado_aprobacion == "pendiente" %}
+<div class="aviso aviso-alerta">
+  Pendiente de aprobación. Mientras no se apruebe, sus facturas no pueden incluirse en el archivo de pago.
+  {% if usuario.puede_aprobar and bloqueo_aprobar %}<br>{{ bloqueo_aprobar }}{% endif %}
+</div>
+{% if usuario.puede_aprobar and not bloqueo_aprobar %}
+<div class="tarjeta">
+  <h2>Aprobación</h2>
+  <p class="suave">Revise sobre todo el banco y el número de cuenta antes de aprobar.</p>
+  <div class="acciones">
+    <form method="post" action="/aprobaciones/{{ p.id }}/aprobar" class="en-linea">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <input type="hidden" name="siguiente" value="/proveedores/{{ p.id }}">
+      <button type="submit" class="boton-ok">Aprobar</button>
+    </form>
+    <form method="post" action="/aprobaciones/{{ p.id }}/rechazar" class="en-linea">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <input type="hidden" name="siguiente" value="/proveedores/{{ p.id }}">
+      <input type="text" name="motivo" placeholder="Motivo del rechazo" maxlength="300" required style="width:18rem">
+      <button type="submit" class="boton-peligro">Rechazar</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+
+{% if avisos %}
+<div class="aviso aviso-alerta">
+  Avisos de validación:
+  <ul>{% for a in avisos %}<li><strong>{{ a.titulo }}.</strong> {{ a.detalle }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="rejilla">
+  <div class="tarjeta">
+    <h2>Identificación</h2>
+    <dl class="datos">
+      <dt>Tipo de ID</dt><dd>{{ p.tipo_id.nombre if p.tipo_id else "—" }}</dd>
+      <dt>Número de ID</dt><dd class="mono">{{ p.numero_id or "—" }}</dd>
+      <dt>Correo</dt><dd>{{ p.correo or "—" }}</dd>
+      <dt>Crédito</dt><dd>{{ p.credito_texto }}</dd>
+    </dl>
+  </div>
+  <div class="tarjeta">
+    <h2>Datos bancarios</h2>
+    <dl class="datos">
+      <dt>Banco</dt><dd>{% if p.banco %}{{ p.banco.nombre }} <span class="suave">(código {{ p.banco.codigo }})</span>{% else %}—{% endif %}</dd>
+      <dt>Tipo de cuenta</dt><dd>{{ p.tipo_cuenta.nombre if p.tipo_cuenta else "—" }}</dd>
+      <dt>Número de cuenta</dt><dd class="mono">{{ p.numero_cuenta or "—" }}</dd>
+      <dt>Registrado en el banco</dt><dd>{{ "Sí" if p.registrado_banco else "No" }}</dd>
+    </dl>
+  </div>
+  <div class="tarjeta">
+    <h2>Control</h2>
+    <dl class="datos">
+      <dt>Creado por</dt><dd>{{ p.creado_por.nombre }} · {{ p.creado_en|fechahora }}</dd>
+      <dt>Última modificación</dt><dd>{{ p.modificado_por.nombre }} · {{ p.modificado_en|fechahora }}</dd>
+      {% if p.aprobado %}
+      <dt>Aprobado por</dt><dd>{{ p.aprobado_por.nombre if p.aprobado_por else "—" }} · {{ p.aprobado_en|fechahora }}</dd>
+      {% endif %}
+    </dl>
+  </div>
+</div>
+
+{% if p.notas %}
+<div class="tarjeta">
+  <h2>Notas</h2>
+  <p style="white-space: pre-wrap">{{ p.notas }}</p>
+</div>
+{% endif %}
+
+<h2>Facturas</h2>
+<div class="tabla-envoltura">
+  <table>
+    <thead><tr><th>Número</th><th>Fecha</th><th>Vence</th><th class="num">Valor</th><th>Estado</th></tr></thead>
+    <tbody>
+      {% for f in facturas %}
+      <tr>
+        <td>{{ f.numero }}</td>
+        <td>{{ f.fecha|fecha }}</td>
+        <td>{{ f.vencimiento|fecha }}</td>
+        <td class="num">{{ f.moneda }} {{ f.valor|dinero }}</td>
+        <td>
+          {% if f.estado == "pendiente" and f.vencimiento < hoy %}<span class="insignia insignia-vencida">Vencida</span>
+          {% else %}<span class="insignia insignia-{{ f.estado }}">{{ f.estado_texto }}</span>{% endif %}
+          {% if f.pagada_en %}<span class="suave">{{ f.pagada_en|fecha }}</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="vacio">Sin facturas registradas.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>Historial de cambios</h2>
+<div class="tabla-envoltura">
+  <table>
+    <thead><tr><th>Fecha</th><th>Quién</th><th>Qué</th><th>Antes</th><th>Después</th></tr></thead>
+    <tbody>
+      {% for h in historial %}
+      <tr>
+        <td>{{ h.fecha|fechahora }}</td>
+        <td>{{ h.usuario_nombre }}</td>
+        <td>{{ h.campo }}{% if h.sensible %} <span class="insignia insignia-alta">dato sensible</span>{% endif %}</td>
+        <td class="cambio"><span class="antes">{{ h.valor_anterior or "" }}</span></td>
+        <td class="cambio"><span class="despues">{{ h.valor_nuevo or "" }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="vacio">Sin movimientos.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

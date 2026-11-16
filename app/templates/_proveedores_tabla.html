@@ -1,0 +1,29 @@
+<div class="tabla-envoltura">
+  <table>
+    <thead>
+      <tr>
+        <th>Nombre</th><th>Identificación</th><th>Banco</th><th>Cuenta</th><th>Crédito</th>
+        <th>Registrado en banco</th><th>Aprobación</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in proveedores %}
+      <tr class="{{ 'inactivo' if not p.activo }}">
+        <td>
+          <a href="/proveedores/{{ p.id }}">{{ p.nombre }}</a>
+          {% if not p.activo %}<span class="insignia">Desactivado</span>{% endif %}
+        </td>
+        <td class="mono">{% if p.tipo_id %}{{ p.tipo_id.nombre }} {% endif %}{{ p.numero_id or "—" }}</td>
+        <td>{{ p.banco.nombre if p.banco else "—" }}</td>
+        <td class="mono">{% if p.tipo_cuenta %}{{ p.tipo_cuenta.codigo }} {% endif %}{{ (p.numero_cuenta|enmascarar) or "—" }}</td>
+        <td>{{ p.credito_texto }}</td>
+        <td>{{ "Sí" if p.registrado_banco else "No" }}</td>
+        <td><span class="insignia insignia-{{ p.estado_aprobacion }}">{{ p.estado_texto }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="vacio">No hay proveedores que coincidan.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="suave">{{ proveedores|length }} proveedor{{ "es" if proveedores|length != 1 }}.</p>

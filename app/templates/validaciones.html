@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titulo %}Validaciones{% endblock %}
+{% block contenido %}
+<div class="cabecera">
+  <h1>Validaciones <span class="suave">({{ total }} aviso{{ "s" if total != 1 }})</span></h1>
+</div>
+<p class="suave">Proveedores activos con datos incompletos o sospechosos. Se recalcula cada vez que abre esta pantalla.</p>
+
+{% for g in grupos %}
+<h2>{{ g.titulo }} <span class="insignia insignia-{{ g.severidad }}">prioridad {{ g.severidad }}</span> <span class="suave">({{ g.casos|length }})</span></h2>
+<div class="tabla-envoltura">
+  <table>
+    <thead><tr><th>Proveedor</th><th>Detalle</th><th>Aprobación</th></tr></thead>
+    <tbody>
+      {% for c in g.casos %}
+      <tr>
+        <td><a href="/proveedores/{{ c.proveedor.id }}">{{ c.proveedor.nombre }}</a></td>
+        <td>{{ c.detalle }}</td>
+        <td><span class="insignia insignia-{{ c.proveedor.estado_aprobacion }}">{{ c.proveedor.estado_texto }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="tarjeta"><p style="margin:0">No hay avisos: todos los proveedores activos tienen sus datos completos y sin duplicados.</p></div>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block titulo %}Configuración{% endblock %}
+{% block contenido %}
+<div class="cabecera"><h1>Configuración</h1></div>
+
+<div class="rejilla">
+  <div class="tarjeta">
+    <h2>Alarmas y archivo de pago</h2>
+    <form method="post" action="/configuracion">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <p>
+        <label for="dias_aviso">Avisar con cuántos días de anticipación</label>
+        <input type="number" id="dias_aviso" name="dias_aviso" value="{{ dias_aviso }}" min="0" max="365" required>
+        <span class="ayuda">El panel muestra lo que vence en ese plazo.</span>
+      </p>
+      <p>
+        <label for="contrapartida">CONTRAPARTIDA del archivo de pago masivo</label>
+        <input type="text" id="contrapartida" name="contrapartida" value="{{ contrapartida }}" maxlength="30" required>
+        <span class="ayuda">Valor fijo que se escribe en la columna CONTRAPARTIDA. Debe ser el mismo que usa hoy su Excel de pago masivo.</span>
+      </p>
+      <button type="submit">Guardar</button>
+    </form>
+  </div>
+
+  <div class="tarjeta">
+    <h2>Revisión diaria</h2>
+    <dl class="datos">
+      <dt>Hora programada</dt><dd>{{ cfg.hora_tarea }} ({{ cfg.zona }}){% if not cfg.tareas_activas %} — <strong>apagada</strong>{% endif %}</dd>
+      <dt>Última revisión</dt><dd>{{ ultima_revision or "Todavía no se ha ejecutado" }}</dd>
+      <dt>Envío por correo</dt>
+      <dd>
+        {% if cfg.correo_activo %}Encendido → {{ cfg.correo_destinatarios|join(", ") or "sin destinatarios" }}
+        {% else %}Apagado (se enciende con <code>CORREO_ACTIVO=true</code> en <code>.env</code>){% endif %}
+      </dd>
+    </dl>
+    <hr class="separador">
+    <form method="post" action="/configuracion/revisar-alarmas">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <button type="submit" class="boton-claro">Revisar alarmas ahora</button>
+    </form>
+  </div>
+
+  <div class="tarjeta">
+    <h2>Respaldos</h2>
+    <p class="suave">Cada día se guarda una copia de la base de datos y se conservan los últimos {{ cfg.respaldos_conservar }}.</p>
+    <dl class="datos">
+      <dt>Carpeta</dt><dd class="mono">{{ cfg.ruta_respaldos }}</dd>
+      <dt>Respaldos guardados</dt><dd>{{ total_respaldos }}</dd>
+    </dl>
+    {% if respaldos %}
+    <ul class="mono" style="padding-left:1.2rem">
+      {% for r in respaldos %}<li>{{ r }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    <form method="post" action="/configuracion/respaldar">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <button type="submit" class="boton-claro">Respaldar ahora</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

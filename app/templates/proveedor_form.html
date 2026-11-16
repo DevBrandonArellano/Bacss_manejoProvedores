@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block titulo %}{{ "Editar proveedor" if p else "Nuevo proveedor" }}{% endblock %}
+{% block contenido %}
+<div class="medio">
+  <h1>{{ "Editar proveedor" if p else "Nuevo proveedor" }}</h1>
+
+  {% if errores %}
+  <div class="aviso aviso-error" role="alert">
+    No se guardó. Corrija lo siguiente:
+    <ul>{% for e in errores %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  {% if p and p.aprobado %}
+  <div class="aviso aviso-alerta">
+    Este proveedor está aprobado. Si cambia el nombre, la identificación, la cuenta o el banco,
+    volverá a quedar <strong>pendiente</strong> hasta que otra persona lo apruebe.
+  </div>
+  {% elif not p %}
+  <div class="aviso aviso-alerta">El proveedor quedará <strong>pendiente</strong> hasta que otra persona lo apruebe.</div>
+  {% endif %}
+
+  <form method="post" action="{{ '/proveedores/' ~ p.id ~ '/editar' if p else '/proveedores/nuevo' }}" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+
+    <div class="tarjeta">
+      <h2>Identificación</h2>
+      <div class="rejilla">
+        <div class="ancho-total">
+          <label for="nombre">Nombre</label>
+          <input type="text" id="nombre" name="nombre" value="{{ datos.nombre or '' }}" maxlength="200" required autofocus>
+        </div>
+        <div>
+          <label for="tipo_id_id">Tipo de ID</label>
+          <select id="tipo_id_id" name="tipo_id_id">
+            <option value="">— Sin definir —</option>
+            {% for t in tipos_id %}
+            <option value="{{ t.id }}" {{ 'selected' if datos.tipo_id_id == t.id }}>{{ t.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="numero_id">Número de ID</label>
+          <input type="text" id="numero_id" name="numero_id" value="{{ datos.numero_id or '' }}" maxlength="30" inputmode="numeric" class="mono">
+          <div class="ayuda">Cédula: 10 dígitos. RUC: 13 dígitos. Se guarda como texto, con sus ceros a la izquierda.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Datos bancarios</h2>
+      <div class="rejilla">
+        <div class="ancho-total">
+          <label for="banco_id">Banco</label>
+          <select id="banco_id" name="banco_id">
+            <option value="">— Sin definir —</option>
+            {% for b in bancos %}
+            <option value="{{ b.id }}" {{ 'selected' if datos.banco_id == b.id }}>{{ b.nombre }} (código {{ b.codigo }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="tipo_cuenta_id">Tipo de cuenta</label>
+          <select id="tipo_cuenta_id" name="tipo_cuenta_id">
+            <option value="">— Sin definir —</option>
+            {% for t in tipos_cuenta %}
+            <option value="{{ t.id }}" {{ 'selected' if datos.tipo_cuenta_id == t.id }}>{{ t.nombre }} ({{ t.codigo }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="numero_cuenta">Número de cuenta</label>
+          <input type="text" id="numero_cuenta" name="numero_cuenta" value="{{ datos.numero_cuenta or '' }}" maxlength="40" inputmode="numeric" class="mono">
+          <div class="ayuda">Se guarda como texto, con sus ceros a la izquierda.</div>
+        </div>
+        <div class="ancho-total">
+          <label class="casilla">
+            <input type="checkbox" name="registrado_banco" value="1" {{ 'checked' if datos.registrado_banco }}>
+            Ya está registrado como beneficiario en el banco
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Contacto y crédito</h2>
+      <div class="rejilla">
+        <div class="ancho-total">
+          <label for="correo">Correo</label>
+          <input type="text" id="correo" name="correo" value="{{ datos.correo or '' }}" maxlength="250">
+          <div class="ayuda">Si son varios, sepárelos con punto y coma.</div>
+        </div>
+        <div>
+          <label for="credito">Condición de crédito</label>
+          <select id="credito" name="credito">
+            <option value="" {{ 'selected' if opcion_credito == '' }}>— Sin definir —</option>
+            <option value="contado" {{ 'selected' if opcion_credito == 'contado' }}>Contado</option>
+            <option value="dias" {{ 'selected' if opcion_credito == 'dias' }}>Días desde la factura</option>
+            <option value="fin_mes" {{ 'selected' if opcion_credito == 'fin_mes' }}>Fin de mes</option>
+            <option value="dia_fijo" {{ 'selected' if opcion_credito == 'dia_fijo' }}>Día fijo de cada mes</option>
+          </select>
+        </div>
+        <div>
+          <label for="credito_dias">Días de crédito</label>
+          <input type="number" id="credito_dias" name="credito_dias" min="0" max="365"
+                 value="{{ datos.credito_valor if opcion_credito == 'dias' and datos.credito_valor is not none else '' }}">
+          <div class="ayuda">Solo si eligió «Días desde la factura».</div>
+        </div>
+        <div>
+          <label for="credito_dia">Día del mes</label>
+          <input type="number" id="credito_dia" name="credito_dia" min="1" max="31"
+                 value="{{ datos.credito_valor if opcion_credito == 'dia_fijo' and datos.credito_valor is not none else '' }}">
+          <div class="ayuda">Solo si eligió «Día fijo de cada mes».</div>
+        </div>
+        <div class="ancho-total">
+          <label for="notas">Notas</label>
+          <textarea id="notas" name="notas" maxlength="2000">{{ datos.notas or '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="acciones">
+      <button type="submit">Guardar</button>
+      <a class="boton boton-claro" href="{{ '/proveedores/' ~ p.id if p else '/proveedores' }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

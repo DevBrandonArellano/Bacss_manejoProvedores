@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block titulo %}Proveedores{% endblock %}
+{% block contenido %}
+{% set vivo %}hx-get="/proveedores" hx-target="#tabla-proveedores" hx-include="#filtros"{% endset %}
+<div class="cabecera">
+  <h1>Proveedores</h1>
+  <div class="acciones">
+    {% if usuario.puede_editar %}<a class="boton" href="/proveedores/nuevo">Nuevo proveedor</a>{% endif %}
+  </div>
+</div>
+
+<form method="get" action="/proveedores" class="filtros" id="filtros">
+  <div class="crece">
+    <label for="q">Buscar</label>
+    <input type="search" id="q" name="q" value="{{ filtros.q }}" placeholder="Nombre, identificación, cuenta o banco"
+           autofocus {{ vivo }} hx-trigger="input changed delay:300ms, search">
+  </div>
+  <div>
+    <label for="banco">Banco</label>
+    <select id="banco" name="banco" {{ vivo }} hx-trigger="change">
+      <option value="">Todos</option>
+      {% for b in bancos_usados %}
+      <option value="{{ b.id }}" {{ 'selected' if filtros.banco == b.id|string }}>{{ b.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="aprobacion">Aprobación</label>
+    <select id="aprobacion" name="aprobacion" {{ vivo }} hx-trigger="change">
+      <option value="">Todas</option>
+      {% for clave, texto in ESTADOS_APROBACION.items() %}
+      <option value="{{ clave }}" {{ 'selected' if filtros.aprobacion == clave }}>{{ texto }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="registrado">Registrado en banco</label>
+    <select id="registrado" name="registrado" {{ vivo }} hx-trigger="change">
+      <option value="">Todos</option>
+      <option value="si" {{ 'selected' if filtros.registrado == 'si' }}>Sí</option>
+      <option value="no" {{ 'selected' if filtros.registrado == 'no' }}>No</option>
+    </select>
+  </div>
+  <div>
+    <label for="estado">Estado</label>
+    <select id="estado" name="estado" {{ vivo }} hx-trigger="change">
+      <option value="activos" {{ 'selected' if filtros.estado == 'activos' }}>Activos</option>
+      <option value="inactivos" {{ 'selected' if filtros.estado == 'inactivos' }}>Desactivados</option>
+      <option value="todos" {{ 'selected' if filtros.estado == 'todos' }}>Todos</option>
+    </select>
+  </div>
+  <div class="acciones">
+    <button type="submit" class="boton-claro">Filtrar</button>
+    <button type="submit" class="boton-claro" formaction="/proveedores/exportar">Exportar a Excel</button>
+  </div>
+</form>
+
+<div id="tabla-proveedores">
+  {% include "_proveedores_tabla.html" %}
+</div>
+{% endblock %}

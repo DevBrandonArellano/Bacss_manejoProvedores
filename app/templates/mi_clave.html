@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titulo %}Mi contraseña{% endblock %}
+{% block contenido %}
+<div class="estrecho">
+  <div class="tarjeta">
+    <h1>Cambiar mi contraseña</h1>
+    {% if error %}<div class="aviso aviso-error" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="/mi-clave" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <p>
+        <label for="actual">Contraseña actual</label>
+        <input type="password" id="actual" name="actual" required>
+      </p>
+      <p>
+        <label for="nueva">Contraseña nueva</label>
+        <input type="password" id="nueva" name="nueva" minlength="8" required>
+        <span class="ayuda">Mínimo 8 caracteres.</span>
+      </p>
+      <p>
+        <label for="repetida">Repita la contraseña nueva</label>
+        <input type="password" id="repetida" name="repetida" minlength="8" required>
+      </p>
+      <button type="submit">Guardar</button>
+      <a class="boton boton-claro" href="/">Cancelar</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

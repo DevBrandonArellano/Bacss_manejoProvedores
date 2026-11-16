@@ -1,0 +1,24 @@
+services:
+  app:
+    build: .
+    image: manejo-proveedores:latest
+    container_name: manejo-proveedores
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      RUTA_BD: /bd/proveedores.db
+      RUTA_RESPALDOS: /respaldos
+      RUTA_EXCEL: /app/datos/proveedores.xlsx
+    ports:
+      - "${PUERTO:-8000}:8000"
+    volumes:
+      # Base de datos: volumen de Docker (sobrevive a actualizaciones y reinicios)
+      - bd:/bd
+      # Respaldos diarios: carpeta del equipo, junto a este archivo
+      - ./respaldos:/respaldos
+      # Excel original, solo lectura, solo para la carga opcional de catálogos
+      - ./datos:/app/datos:ro
+
+volumes:
+  bd:

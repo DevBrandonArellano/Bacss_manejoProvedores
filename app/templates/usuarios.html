@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block titulo %}Usuarios{% endblock %}
+{% block contenido %}
+<div class="cabecera"><h1>Usuarios</h1></div>
+
+<div class="tarjeta">
+  <h2>Perfiles</h2>
+  <ul style="margin:0; padding-left:1.2rem">
+    <li><strong>Creador:</strong> registra y edita proveedores, registra facturas, las marca como pagadas y genera el archivo de pago.</li>
+    <li><strong>Aprobador:</strong> consulta todo y aprueba o rechaza proveedores. No puede modificarlos.</li>
+    <li><strong>Administrador:</strong> todo lo anterior, más usuarios, catálogos y configuración.</li>
+  </ul>
+  <p class="suave" style="margin:.5rem 0 0">Nadie puede aprobar un proveedor que creó o modificó por última vez, tampoco el administrador.</p>
+</div>
+
+<div class="tabla-envoltura">
+  <table>
+    <thead><tr><th>Usuario</th><th>Nombre</th><th>Perfil</th><th>Activo</th><th>Nueva contraseña</th><th></th></tr></thead>
+    <tbody>
+      {% for x in lista %}
+      <tr class="{{ 'inactivo' if not x.activo }}">
+        <td class="mono">{{ x.usuario }}{% if x.id == usuario.id %} <span class="insignia">usted</span>{% endif %}</td>
+        <td><input type="text" form="usuario-{{ x.id }}" name="nombre" value="{{ x.nombre }}" maxlength="120" required aria-label="Nombre"></td>
+        <td>
+          <select form="usuario-{{ x.id }}" name="rol" aria-label="Perfil">
+            {% for clave, texto in ROLES.items() %}
+            <option value="{{ clave }}" {{ 'selected' if x.rol == clave }}>{{ texto }}</option>
+            {% endfor %}
+          </select>
+        </td>
+        <td><input type="checkbox" form="usuario-{{ x.id }}" name="activo" value="1" {{ 'checked' if x.activo }} aria-label="Activo"></td>
+        <td><input type="password" form="usuario-{{ x.id }}" name="clave" placeholder="(sin cambio)" minlength="8" autocomplete="new-password" aria-label="Nueva contraseña"></td>
+        <td>
+          <form method="post" action="/usuarios/{{ x.id }}" id="usuario-{{ x.id }}" class="en-linea">
+            <input type="hidden" name="csrf_token" value="{{ csrf }}">
+            <button type="submit" class="boton-chico boton-claro">Guardar</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="tarjeta medio">
+  <h2>Nuevo usuario</h2>
+  <form method="post" action="/usuarios/nuevo" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <div class="rejilla">
+      <div>
+        <label for="nuevo-usuario">Usuario</label>
+        <input type="text" id="nuevo-usuario" name="usuario" maxlength="60" pattern="[A-Za-z0-9._\-]{3,60}" required>
+        <div class="ayuda">Letras, números, punto o guion. Con esto inicia sesión.</div>
+      </div>
+      <div>
+        <label for="nuevo-nombre">Nombre de la persona</label>
+        <input type="text" id="nuevo-nombre" name="nombre" maxlength="120" required>
+      </div>
+      <div>
+        <label for="nuevo-rol">Perfil</label>
+        <select id="nuevo-rol" name="rol" required>
+          <option value="creador">Creador</option>
+          <option value="aprobador">Aprobador</option>
+          <option value="administrador">Administrador</option>
+        </select>
+      </div>
+      <div>
+        <label for="nuevo-clave">Contraseña inicial</label>
+        <input type="password" id="nuevo-clave" name="clave" minlength="8" autocomplete="new-password" required>
+        <div class="ayuda">Mínimo 8 caracteres. La persona puede cambiarla en «Mi contraseña».</div>
+      </div>
+    </div>
+    <p style="margin:.75rem 0 0"><button type="submit">Crear usuario</button></p>
+  </form>
+</div>
+{% endblock %}

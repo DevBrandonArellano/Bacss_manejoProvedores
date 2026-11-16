@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block titulo %}Registrar factura{% endblock %}
+{% block contenido %}
+<div class="medio">
+  <h1>Registrar factura</h1>
+
+  {% if errores %}
+  <div class="aviso aviso-error" role="alert">
+    No se guardó. Corrija lo siguiente:
+    <ul>{% for e in errores %}<li>{{ e }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  {% if not proveedores %}
+  <div class="aviso aviso-alerta">Todavía no hay proveedores activos. Registre primero un proveedor.</div>
+  {% endif %}
+
+  <form method="post" action="/facturas/nueva" autocomplete="off" class="tarjeta">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <div class="rejilla">
+      <div class="ancho-total">
+        <label for="proveedor_id">Proveedor</label>
+        <select id="proveedor_id" name="proveedor_id" required>
+          <option value="">— Elija —</option>
+          {% for p in proveedores %}
+          <option value="{{ p.id }}" {{ 'selected' if datos.proveedor_id == p.id }}>{{ p.nombre }} — {{ p.credito_texto }}{% if not p.aprobado %} ({{ p.estado_texto|lower }}){% endif %}</option>
+          {% endfor %}
+        </select>
+        <div class="ayuda">La fecha de vencimiento se calcula sola con la condición de crédito del proveedor.</div>
+      </div>
+      <div>
+        <label for="numero">Número de factura</label>
+        <input type="text" id="numero" name="numero" value="{{ datos.numero or '' }}" maxlength="60" required>
+      </div>
+      <div>
+        <label for="fecha">Fecha de la factura</label>
+        <input type="date" id="fecha" name="fecha" value="{{ datos.fecha or '' }}" required>
+      </div>
+      <div>
+        <label for="valor">Valor</label>
+        <input type="text" id="valor" name="valor" value="{{ datos.valor or '' }}" inputmode="decimal" placeholder="0.00" required>
+      </div>
+      <div>
+        <label for="moneda">Moneda</label>
+        <input type="text" id="moneda" name="moneda" value="{{ datos.moneda or 'USD' }}" maxlength="3" required>
+      </div>
+      <div class="ancho-total">
+        <label for="notas">Notas</label>
+        <textarea id="notas" name="notas" maxlength="1000">{{ datos.notas or '' }}</textarea>
+      </div>
+    </div>
+    <hr class="separador">
+    <div class="acciones">
+      <button type="submit">Guardar factura</button>
+      <a class="boton boton-claro" href="/facturas">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

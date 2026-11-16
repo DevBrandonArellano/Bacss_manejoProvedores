@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block titulo %}Catálogos{% endblock %}
+
+{% macro tipos(titulo, clase, filas, csrf) %}
+<div class="tarjeta">
+  <h2>{{ titulo }}</h2>
+  <table>
+    <thead><tr><th>Código</th><th>Nombre</th><th>Activo</th><th></th></tr></thead>
+    <tbody>
+      {% for t in filas %}
+      <tr>
+        <td><input type="text" form="{{ clase }}-{{ t.id }}" name="codigo" value="{{ t.codigo }}" maxlength="10" required class="mono" style="width:5rem" aria-label="Código"></td>
+        <td><input type="text" form="{{ clase }}-{{ t.id }}" name="nombre" value="{{ t.nombre }}" maxlength="60" required aria-label="Nombre"></td>
+        <td><input type="checkbox" form="{{ clase }}-{{ t.id }}" name="activo" value="1" {{ 'checked' if t.activo }} aria-label="Activo"></td>
+        <td>
+          <form method="post" action="/catalogos/{{ clase }}/{{ t.id }}" id="{{ clase }}-{{ t.id }}" class="en-linea">
+            <input type="hidden" name="csrf_token" value="{{ csrf }}">
+            <button type="submit" class="boton-chico boton-claro">Guardar</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <hr class="separador">
+  <form method="post" action="/catalogos/{{ clase }}/nuevo" class="en-linea">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="text" name="codigo" placeholder="Código" maxlength="10" required style="width:6rem">
+    <input type="text" name="nombre" placeholder="Nombre" maxlength="60" required>
+    <button type="submit" class="boton-chico">Agregar</button>
+  </form>
+</div>
+{% endmacro %}
+
+{% block contenido %}
+<div class="cabecera"><h1>Catálogos</h1></div>
+
+{% if resumen %}
+<div class="aviso aviso-ok" role="status">
+  Carga de catálogos terminada (solo se leyó la hoja «{{ hoja_catalogos }}»):
+  <ul>{% for linea in resumen.lineas() %}<li>{{ linea }}</li>{% endfor %}</ul>
+</div>
+{% if resumen.avisos %}
+<div class="aviso aviso-alerta">
+  Avisos de la carga:
+  <ul>{% for a in resumen.avisos %}<li>{{ a }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="rejilla">
+  {{ tipos("Tipos de ID", "tipos-id", tipos_id, csrf) }}
+  {{ tipos("Tipos de cuenta", "tipos-cuenta", tipos_cuenta, csrf) }}
+</div>
+
+<h2>Instituciones financieras</h2>
+<div class="aviso aviso-alerta">
+  <strong>Los códigos de institución financiera son oficiales</strong> (los asigna el Estado ecuatoriano) y son los que
+  salen en la columna CODIGOS BANCOS del archivo de pago. Vienen cargados con la aplicación; cámbielos solo si el
+  catálogo oficial cambió. En el catálogo oficial hay códigos que comparten dos instituciones: es normal verlos repetidos.
+</div>
+
+<div class="rejilla">
+  <div class="tarjeta">
+    <h3>Agregar una institución</h3>
+    <form method="post" action="/catalogos/bancos/nuevo" class="en-linea">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <input type="text" name="codigo" placeholder="Código oficial" maxlength="20" required style="width:8rem">
+      <input type="text" name="nombre" placeholder="Nombre de la institución" maxlength="200" required>
+      <button type="submit" class="boton-chico">Agregar</button>
+    </form>
+  </div>
+  <div class="tarjeta">
+    <h3>Actualizar desde el Excel</h3>
+    <form method="post" action="/catalogos/cargar-excel" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <input type="file" name="archivo" accept=".xlsx" {{ 'required' if not excel_en_servidor }}>
+      <div class="ayuda">
+        Lee únicamente la hoja «{{ hoja_catalogos }}» y agrega lo que falte; no modifica ni borra lo existente y
+        no lee los proveedores.
+        {% if excel_en_servidor %}Si no elige archivo se usa el Excel que está en el servidor.{% endif %}
+      </div>
+      <p style="margin:.5rem 0 0"><button type="submit" class="boton-chico boton-claro">Cargar catálogos</button></p>
+    </form>
+  </div>
+</div>
+
+<form method="get" action="/catalogos" class="filtros">
+  <div class="crece">
+    <label for="q">Buscar institución</label>
+    <input type="search" id="q" name="q" value="{{ q }}" placeholder="Nombre o código"
+           hx-get="/catalogos" hx-target="#tabla-bancos" hx-trigger="input changed delay:300ms, search">
+  </div>
+  <div><button type="submit" class="boton-claro">Buscar</button></div>
+</form>
+
+<div id="tabla-bancos">
+  {% include "_bancos_tabla.html" %}
+</div>
+{% endblock %}

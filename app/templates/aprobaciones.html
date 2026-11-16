@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block titulo %}Aprobaciones{% endblock %}
+{% block contenido %}
+<div class="cabecera">
+  <h1>Aprobaciones <span class="suave">({{ tarjetas|length }} pendiente{{ "s" if tarjetas|length != 1 }})</span></h1>
+  {% if aprobables %}
+  <form method="post" action="/aprobaciones/lote" id="lote" class="en-linea"
+        onsubmit="return confirm('¿Aprobar todos los proveedores seleccionados?')">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label class="casilla" style="margin:0">
+      <input type="checkbox" onclick="document.querySelectorAll('input[form=lote][name=ids]:not(:disabled)').forEach(c => c.checked = this.checked)">
+      Seleccionar todos
+    </label>
+    <button type="submit" class="boton-ok">Aprobar seleccionados</button>
+  </form>
+  {% endif %}
+</div>
+
+<p class="suave">
+  Un proveedor nuevo, o uno al que se le cambió el nombre, la identificación, la cuenta o el banco, queda pendiente
+  hasta que lo apruebe una persona distinta de quien lo creó o lo modificó por última vez.
+  Mientras tanto sus facturas no pueden salir en el archivo de pago.
+</p>
+
+{% for t in tarjetas %}
+{% set p = t["p"] %}
+<div class="tarjeta">
+  <div class="cabecera">
+    <div>
+      <h2 style="margin:0">
+        {% if not t["bloqueo"] %}
+        <input type="checkbox" form="lote" name="ids" value="{{ p.id }}" aria-label="Seleccionar {{ p.nombre }}">
+        {% endif %}
+        <a href="/proveedores/{{ p.id }}">{{ p.nombre }}</a>
+      </h2>
+      <span class="suave">
+        Creado por {{ p.creado_por.nombre }} el {{ p.creado_en|fechahora }} ·
+        última modificación de {{ p.modificado_por.nombre }} el {{ p.modificado_en|fechahora }}
+      </span>
+    </div>
+    {% if t["bloqueo"] %}
+    <span class="insignia insignia-media">{{ t["bloqueo"] }}</span>
+    {% else %}
+    <div class="acciones">
+      <form method="post" action="/aprobaciones/{{ p.id }}/aprobar" class="en-linea">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <button type="submit" class="boton-ok">Aprobar</button>
+      </form>
+      <form method="post" action="/aprobaciones/{{ p.id }}/rechazar" class="en-linea">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <input type="text" name="motivo" placeholder="Motivo del rechazo" maxlength="300" required style="width:16rem">
+        <button type="submit" class="boton-peligro">Rechazar</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="rejilla">
+    <dl class="datos">
+      <dt>Identificación</dt><dd class="mono">{{ p.tipo_id.nombre if p.tipo_id else "—" }} {{ p.numero_id or "—" }}</dd>
+      <dt>Banco</dt><dd>{% if p.banco %}{{ p.banco.nombre }} (código {{ p.banco.codigo }}){% else %}—{% endif %}</dd>
+      <dt>Cuenta</dt><dd class="mono">{{ p.tipo_cuenta.nombre if p.tipo_cuenta else "—" }} {{ p.numero_cuenta or "—" }}</dd>
+      <dt>Correo</dt><dd>{{ p.correo or "—" }}</dd>
+      <dt>Crédito</dt><dd>{{ p.credito_texto }}</dd>
+    </dl>
+    <div>
+      <h3>Qué hay que revisar</h3>
+      {% if t["cambios"] %}
+      <table>
+        <tbody>
+          {% for h in t["cambios"] %}
+          <tr>
+            <td>{{ h.campo }}{% if h.sensible %} <span class="insignia insignia-alta">sensible</span>{% endif %}</td>
+            <td class="cambio">
+              {% if h.tipo == "creacion" %}<span class="despues">Proveedor nuevo</span>
+              {% else %}<span class="antes">{{ h.valor_anterior }}</span> → <span class="despues">{{ h.valor_nuevo }}</span>{% endif %}
+            </td>
+            <td class="suave">{{ h.usuario_nombre }} · {{ h.fecha|fechahora }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="suave">Sin cambios registrados desde la última decisión.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if t["avisos"] %}
+  <div class="aviso aviso-alerta" style="margin:.75rem 0 0">
+    Avisos de validación:
+    <ul>{% for a in t["avisos"] %}<li><strong>{{ a.titulo }}.</strong> {{ a.detalle }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="tarjeta"><p class="suave" style="margin:0">No hay proveedores pendientes de aprobación.</p></div>
+{% endfor %}
+
+{% if rechazados %}
+<h2>Rechazados (esperan corrección)</h2>
+<div class="tabla-envoltura">
+  <table>
+    <thead><tr><th>Proveedor</th><th>Motivo</th><th>Rechazado por</th><th>Fecha</th></tr></thead>
+    <tbody>
+      {% for p in rechazados %}
+      <tr>
+        <td><a href="/proveedores/{{ p.id }}">{{ p.nombre }}</a></td>
+        <td>{{ p.motivo_rechazo }}</td>
+        <td>{{ p.aprobado_por.nombre if p.aprobado_por else "—" }}</td>
+        <td>{{ p.aprobado_en|fechahora }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<h2>Últimas decisiones</h2>
+<div class="tabla-envoltura">
+  <table>
+    <thead><tr><th>Fecha</th><th>Proveedor</th><th>Decisión</th><th>Quién</th></tr></thead>
+    <tbody>
+      {% for h in decisiones %}
+      <tr>
+        <td>{{ h.fecha|fechahora }}</td>
+        <td><a href="/proveedores/{{ h.proveedor_id }}">{{ h.proveedor.nombre }}</a></td>
+        <td>{{ h.valor_nuevo }}</td>
+        <td>{{ h.usuario_nombre }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="vacio">Todavía no hay decisiones.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.venv
+venv
+datos
+bd
+respaldos
+**/__pycache__
+**/*.pyc
+.pytest_cache
+*.db
+*.xlsx
+PROMPT.md

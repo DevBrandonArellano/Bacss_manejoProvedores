@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block titulo %}Panel{% endblock %}
+
+{% macro tabla(facturas, vacio, csrf, usuario, hoy) %}
+<div class="tabla-envoltura">
+  <table>
+    <thead>
+      <tr>
+        <th>Proveedor</th><th>Factura</th><th>Fecha</th><th>Vence</th><th class="num">Días</th>
+        <th class="num">Valor</th><th>Proveedor aprobado</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in facturas %}
+      {% set dias = (f.vencimiento - hoy).days %}
+      <tr>
+        <td><a href="/proveedores/{{ f.proveedor.id }}">{{ f.proveedor.nombre }}</a></td>
+        <td>{{ f.numero }}</td>
+        <td>{{ f.fecha|fecha }}</td>
+        <td>{{ f.vencimiento|fecha }}</td>
+        <td class="num">
+          {% if dias < 0 %}<span class="insignia insignia-vencida">{{ -dias }} de atraso</span>
+          {% elif dias == 0 %}hoy
+          {% else %}en {{ dias }}{% endif %}
+        </td>
+        <td class="num">{{ f.moneda }} {{ f.valor|dinero }}</td>
+        <td><span class="insignia insignia-{{ f.proveedor.estado_aprobacion }}">{{ f.proveedor.estado_texto }}</span></td>
+        <td>
+          {% if usuario.puede_editar %}
+          <form method="post" action="/facturas/{{ f.id }}/pagar" hx-post="/facturas/{{ f.id }}/pagar"
+                hx-confirm="¿Marcar la factura {{ f.numero }} como pagada?" class="en-linea">
+            <input type="hidden" name="csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="siguiente" value="/">
+            <button type="submit" class="boton-chico boton-ok">Marcar pagada</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="vacio">{{ vacio }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+{% block contenido %}
+<div class="cabecera">
+  <h1>Panel de pagos</h1>
+  <form method="get" action="/" class="en-linea">
+    <label for="dias" style="margin:0">Mostrar lo que vence en los próximos</label>
+    <input type="number" id="dias" name="dias" value="{{ dias }}" min="0" max="365" style="width:5rem">
+    <span>días</span>
+    <button type="submit" class="boton-claro">Ver</button>
+  </form>
+</div>
+
+<div class="rejilla-3">
+  <div class="tarjeta vencidas">
+    <div class="suave">Vencidas</div>
+    <div class="cifra">{{ grupos["vencidas"]|length }}</div>
+    <div class="suave">{{ totales["vencidas"] or "—" }}</div>
+  </div>
+  <div class="tarjeta hoy">
+    <div class="suave">Vencen hoy ({{ hoy|fecha }})</div>
+    <div class="cifra">{{ grupos["hoy"]|length }}</div>
+    <div class="suave">{{ totales["hoy"] or "—" }}</div>
+  </div>
+  <div class="tarjeta proximas">
+    <div class="suave">Próximos {{ dias }} días</div>
+    <div class="cifra">{{ grupos["proximas"]|length }}</div>
+    <div class="suave">{{ totales["proximas"] or "—" }}</div>
+  </div>
+</div>
+
+<h2>Vencidas</h2>
+{{ tabla(grupos["vencidas"], "No hay facturas vencidas.", csrf, usuario, hoy) }}
+
+<h2>Vencen hoy</h2>
+{{ tabla(grupos["hoy"], "Hoy no vence ninguna factura.", csrf, usuario, hoy) }}
+
+<h2>Vencen en los próximos {{ dias }} días</h2>
+{{ tabla(grupos["proximas"], "No hay facturas por vencer en ese plazo.", csrf, usuario, hoy) }}
+
+<p class="suave">
+  Días de aviso configurados: {{ dias_configurado }}.
+  {% if ultima_revision %}Última revisión automática: {{ ultima_revision }}.{% endif %}
+  {% if usuario.puede_editar %}<a href="/facturas/nueva">Registrar una factura</a>{% endif %}
+</p>
+{% endblock %}

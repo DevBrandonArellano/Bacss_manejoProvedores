@@ -1,0 +1,21 @@
+# Datos confidenciales: nunca al repositorio
+datos/
+bd/
+respaldos/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+.env
+
+# Archivos Excel (el original y los exportados)
+*.xlsx
+*.xls
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/

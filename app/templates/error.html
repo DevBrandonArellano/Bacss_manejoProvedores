@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block contenido %}
+<div class="tarjeta medio">
+  <h1>{{ titulo }}</h1>
+  <p>{{ detalle }}</p>
+  {% if lineas %}
+  <ul>
+    {% for linea in lineas %}<li>{{ linea }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <p><a class="boton boton-claro" href="{{ volver or '/' }}">Volver</a></p>
+</div>
+{% endblock %}

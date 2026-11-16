@@ -1,0 +1,24 @@
+<div class="tabla-envoltura">
+  <table>
+    <thead><tr><th>Código oficial</th><th>Nombre</th><th>Activo</th><th></th></tr></thead>
+    <tbody>
+      {% for b in bancos %}
+      <tr class="{{ 'inactivo' if not b.activo }}">
+        <td><input type="text" form="banco-{{ b.id }}" name="codigo" value="{{ b.codigo }}" maxlength="20" required class="mono" style="width:7rem" aria-label="Código de {{ b.nombre }}"></td>
+        <td><input type="text" form="banco-{{ b.id }}" name="nombre" value="{{ b.nombre }}" maxlength="200" required aria-label="Nombre"></td>
+        <td><input type="checkbox" form="banco-{{ b.id }}" name="activo" value="1" {{ 'checked' if b.activo }} aria-label="Activo"></td>
+        <td>
+          <form method="post" action="/catalogos/bancos/{{ b.id }}" id="banco-{{ b.id }}" class="en-linea"
+                onsubmit="return confirm('Los códigos son oficiales. ¿Guardar los cambios de esta institución?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf }}">
+            <button type="submit" class="boton-chico boton-claro">Guardar</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="vacio">Ninguna institución coincide.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="suave">{{ bancos|length }} institución{{ "es" if bancos|length != 1 }}.</p>

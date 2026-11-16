@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block titulo %}Facturas{% endblock %}
+{% block contenido %}
+<div class="cabecera">
+  <h1>Facturas por pagar</h1>
+  <div class="acciones">
+    {% if usuario.puede_editar %}
+    <form method="post" action="/facturas/exportar" id="exportar" class="en-linea">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <button type="submit" class="boton-claro">Exportar pago masivo (seleccionadas)</button>
+    </form>
+    <a class="boton" href="/facturas/nueva">Registrar factura</a>
+    {% endif %}
+  </div>
+</div>
+
+<form method="get" action="/facturas" class="filtros">
+  <div class="crece">
+    <label for="q">Buscar</label>
+    <input type="search" id="q" name="q" value="{{ filtros.q }}" placeholder="Proveedor o número de factura">
+  </div>
+  <div>
+    <label for="estado">Estado</label>
+    <select id="estado" name="estado">
+      {% for clave, texto in ESTADOS_FACTURA.items() %}
+      <option value="{{ clave }}" {{ 'selected' if filtros.estado == clave }}>{{ texto }}s</option>
+      {% endfor %}
+      <option value="todas" {{ 'selected' if filtros.estado == 'todas' }}>Todas</option>
+    </select>
+  </div>
+  <div><button type="submit" class="boton-claro">Filtrar</button></div>
+</form>
+
+<div class="tabla-envoltura">
+  <table>
+    <thead>
+      <tr>
+        <th>
+          {% if usuario.puede_editar %}
+          <input type="checkbox" aria-label="Seleccionar todas"
+                 onclick="document.querySelectorAll('input[form=exportar][name=ids]:not(:disabled)').forEach(c => c.checked = this.checked)">
+          {% endif %}
+        </th>
+        <th>Proveedor</th><th>Factura</th><th>Fecha</th><th>Vence</th><th class="num">Valor</th><th>Estado</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fila in filas %}
+      {% set f = fila["f"] %}
+      <tr>
+        <td>
+          {% if usuario.puede_editar and f.estado == "pendiente" %}
+          <input type="checkbox" form="exportar" name="ids" value="{{ f.id }}" {{ 'disabled' if fila["bloqueo"] }}
+                 aria-label="Seleccionar factura {{ f.numero }}">
+          {% endif %}
+        </td>
+        <td>
+          <a href="/proveedores/{{ f.proveedor.id }}">{{ f.proveedor.nombre }}</a>
+          {% if f.estado == "pendiente" and fila["bloqueo"] %}
+          <div class="ayuda">No exportable: {{ fila["bloqueo"] }}</div>
+          {% endif %}
+        </td>
+        <td>{{ f.numero }}</td>
+        <td>{{ f.fecha|fecha }}</td>
+        <td>{{ f.vencimiento|fecha }}</td>
+        <td class="num">{{ f.moneda }} {{ f.valor|dinero }}</td>
+        <td>
+          {% if f.estado == "pendiente" and f.vencimiento < hoy %}<span class="insignia insignia-vencida">Vencida</span>
+          {% else %}<span class="insignia insignia-{{ f.estado }}">{{ f.estado_texto }}</span>{% endif %}
+          {% if f.pagada_en %}<div class="ayuda">Pagada el {{ f.pagada_en|fecha }}{% if f.pagada_por %} por {{ f.pagada_por.nombre }}{% endif %}</div>{% endif %}
+          {% if f.exportada_en %}<div class="ayuda">Exportada el {{ f.exportada_en|fechahora }}</div>{% endif %}
+        </td>
+        <td>
+          {% if usuario.puede_editar %}
+          <div class="acciones">
+            {% if f.estado == "pendiente" %}
+            <form method="post" action="/facturas/{{ f.id }}/pagar" hx-post="/facturas/{{ f.id }}/pagar"
+                  hx-confirm="¿Marcar la factura {{ f.numero }} como pagada?" class="en-linea">
+              <input type="hidden" name="csrf_token" value="{{ csrf }}">
+              <button type="submit" class="boton-chico boton-ok">Pagada</button>
+            </form>
+            <form method="post" action="/facturas/{{ f.id }}/anular" hx-post="/facturas/{{ f.id }}/anular"
+                  hx-confirm="¿Anular la factura {{ f.numero }}?" class="en-linea">
+              <input type="hidden" name="csrf_token" value="{{ csrf }}">
+              <button type="submit" class="boton-chico boton-peligro">Anular</button>
+            </form>
+            {% else %}
+            <form method="post" action="/facturas/{{ f.id }}/reabrir" hx-post="/facturas/{{ f.id }}/reabrir"
+                  hx-confirm="¿Volver a dejar pendiente la factura {{ f.numero }}?" class="en-linea">
+              <input type="hidden" name="csrf_token" value="{{ csrf }}">
+              <button type="submit" class="boton-chico boton-claro">Reabrir</button>
+            </form>
+            {% endif %}
+          </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="vacio">No hay facturas con ese filtro.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="suave">{{ filas|length }} factura{{ "s" if filas|length != 1 }}{% if total %} · Total: {{ total }}{% endif %}.</p>
+<p class="suave">
+  Solo se pueden exportar facturas pendientes de proveedores <strong>aprobados</strong>, activos y con datos bancarios completos.
+  El archivo tiene el mismo formato de la hoja de pago masivo del Excel.
+</p>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titulo %}Historial{% endblock %}
+{% block contenido %}
+<div class="cabecera"><h1>Historial de cambios</h1></div>
+<p class="suave">Quién cambió qué y cuándo. Un cambio de cuenta bancaria es el punto clásico de fraude: revíselos.</p>
+
+<form method="get" action="/historial" class="filtros">
+  <div class="crece">
+    <label for="q">Buscar</label>
+    <input type="search" id="q" name="q" value="{{ filtros.q }}" placeholder="Proveedor o usuario">
+  </div>
+  <div>
+    <label for="solo">Mostrar</label>
+    <select id="solo" name="solo">
+      <option value="" {{ 'selected' if filtros.solo == '' }}>Todo</option>
+      <option value="bancarios" {{ 'selected' if filtros.solo == 'bancarios' }}>Solo datos bancarios y de identificación</option>
+      <option value="aprobaciones" {{ 'selected' if filtros.solo == 'aprobaciones' }}>Solo aprobaciones y rechazos</option>
+    </select>
+  </div>
+  <div><button type="submit" class="boton-claro">Filtrar</button></div>
+</form>
+
+<div class="tabla-envoltura">
+  <table>
+    <thead><tr><th>Fecha</th><th>Proveedor</th><th>Quién</th><th>Qué</th><th>Antes</th><th>Después</th></tr></thead>
+    <tbody>
+      {% for h in movimientos %}
+      <tr>
+        <td>{{ h.fecha|fechahora }}</td>
+        <td><a href="/proveedores/{{ h.proveedor_id }}">{{ h.proveedor.nombre }}</a></td>
+        <td>{{ h.usuario_nombre }}</td>
+        <td>{{ h.campo }}{% if h.sensible %} <span class="insignia insignia-alta">dato sensible</span>{% endif %}</td>
+        <td class="cambio"><span class="antes">{{ h.valor_anterior or "" }}</span></td>
+        <td class="cambio"><span class="despues">{{ h.valor_nuevo or "" }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="vacio">Sin movimientos.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="suave">Se muestran como máximo los 500 movimientos más recientes.</p>
+{% endblock %}
