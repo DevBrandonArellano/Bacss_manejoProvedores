@@ -4,7 +4,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from .. import config, credito, exportacion, servicios, validaciones
+from .. import config, credito, exportacion, identificacion, servicios, validaciones
 from ..db import get_db
 from ..modelos import ESTADOS_APROBACION, Banco, Factura, Historial, Proveedor, TipoCuenta, TipoId, Usuario
 from ..web import aviso, entero, es_htmx, ir, puede_editar, render, usuario_actual
@@ -162,6 +162,18 @@ def _formulario(request: Request, sesion: Session, datos: dict, p: Proveedor = N
     )
 
 
+def _avisar_si_el_ruc_es_dudoso(request: Request, sesion: Session, p: Proveedor) -> None:
+    """RUC de sociedad que no pasa el verificador: ya se guardó; solo se advierte."""
+    tipo = sesion.get(TipoId, p.tipo_id_id) if p.tipo_id_id else None
+    if tipo is not None and p.numero_id and identificacion.revisar(tipo.codigo, p.numero_id).avisos:
+        aviso(
+            request,
+            "Atención: el RUC no pasó la verificación del dígito verificador. Se guardó igual; confírmelo en el SRI. "
+            "Queda marcado en «Validaciones».",
+            "alerta",
+        )
+
+
 @router.get("/proveedores")
 def listado(
     request: Request,
@@ -239,6 +251,11 @@ def verificar(
     tipo = sesion.get(TipoId, entero(tipo_id_id)) if entero(tipo_id_id) else None
     numero_id = servicios.sin_espacios(numero_id)
     if tipo is not None and numero_id:
+        largo = servicios.LARGO_ID.get(tipo.codigo)
+        if largo and numero_id.isdigit() and len(numero_id) == largo:  # el largo ya lo avisa la pantalla
+            revision = identificacion.revisar(tipo.codigo, numero_id)
+            avisos += [("error", texto, None) for texto in revision.errores]
+            avisos += [("alerta", texto, None) for texto in revision.avisos]
         consulta = select(Proveedor).where(Proveedor.tipo_id_id == tipo.id, Proveedor.numero_id == numero_id)
         if otro is not None:
             consulta = consulta.where(Proveedor.id != otro)
@@ -270,6 +287,7 @@ async def crear(request: Request, u: Usuario = Depends(puede_editar), sesion: Se
     p = servicios.crear_proveedor(sesion, datos, u)
     sesion.commit()
     aviso(request, "Proveedor creado. Queda pendiente hasta que otra persona lo apruebe.")
+    _avisar_si_el_ruc_es_dudoso(request, sesion, p)
     return ir(f"/proveedores/{p.id}")
 
 
@@ -317,6 +335,7 @@ async def editar(request: Request, pid: int, u: Usuario = Depends(puede_editar),
         aviso(request, "Cambios guardados. El proveedor vuelve a quedar pendiente de aprobación.", "alerta")
     else:
         aviso(request, "Cambios guardados.")
+    _avisar_si_el_ruc_es_dudoso(request, sesion, p)
     return ir(f"/proveedores/{p.id}")
 
 

@@ -17,7 +17,7 @@ Aplicación web para llevar el control de proveedores (identificación, datos ba
 2. `docker compose up -d`
 3. Abra `http://NOMBRE-O-IP-DEL-EQUIPO:8000` (el puerto se cambia con `PUERTO` en `.env`).
 
-La app reinicia sola con el equipo (`restart: unless-stopped`). Arranca **vacía**: los proveedores se registran a mano. El catálogo de instituciones financieras (con los códigos oficiales) viene incluido y se carga al crear la base.
+La app reinicia sola con el equipo (`restart: unless-stopped`). Arranca **vacía**: los proveedores se registran a mano o se importan desde un Excel (ver «Importar proveedores»). El catálogo de instituciones financieras (con los códigos oficiales) viene incluido y se carga al crear la base.
 
 > **Linux:** la app corre con el usuario 10001. Antes del primer arranque cree la carpeta de respaldos con permisos para él: `mkdir respaldos && sudo chown 10001 respaldos`. Si no, el respaldo diario falla por permisos. En Docker Desktop (Windows) no hace falta.
 
@@ -39,9 +39,37 @@ Por ahora la app solo registra proveedores. Las facturas, el panel de pagos, las
 - Para volver a usarlas: poner `FACTURACION_ACTIVA=true` en `.env` y ejecutar `docker compose up -d` (no basta `restart`). Los datos de facturas que ya existan en la base se conservan.
 - Las condiciones de crédito de cada proveedor se siguen guardando.
 
+## Validación de cédula y RUC
+
+Al guardar un proveedor se revisa el número de identificación con el dígito verificador oficial (módulo 10 y módulo 11), contrastado con la implementación de referencia de [python-stdnum](https://arthurdejong.org/python-stdnum/):
+
+| Caso | Qué se revisa | Si no cumple |
+|---|---|---|
+| Cédula | 10 dígitos, provincia (01-24, 30, 50), tercer dígito 0-6, módulo 10 | **No se guarda** |
+| RUC de persona natural (tercer dígito 0-5) | Cédula válida + establecimiento distinto de 000 | **No se guarda** |
+| RUC de sociedad privada (9) o pública (6) | Módulo 11 y establecimiento | **Solo aviso**: se guarda y queda en «Validaciones» |
+| Pasaporte | No se revisa | — |
+
+En los RUC de sociedades no se bloquea porque el SRI no garantiza ese cálculo para todos los RUC y se han reportado RUC reales que no lo cumplen. El formulario avisa mientras se escribe, al guardar muestra una advertencia amarilla («Se guardó igual; confírmelo en el SRI»), y la pantalla «Validaciones» lista lo ya guardado o importado que no pasa la revisión. Si un RUC de sociedad sale como dudoso, confírmelo en la consulta pública del SRI.
+
 ## Alarmas
 
 El panel inicial muestra facturas vencidas, que vencen hoy y las de los próximos N días. El vencimiento se calcula con la condición de crédito del proveedor (N días, fin de mes o día fijo del mes). El envío por correo existe pero está apagado: se activa con `CORREO_ACTIVO=true` y los datos `SMTP_*` en `.env`.
+
+## Importar proveedores desde un Excel
+
+Carga los proveedores de un libro con hojas que tengan las columnas `TIPO ID`, `NUMERO ID`, `TIPO CTA`, `NUMERO CTA` y `BANCOS` (el nombre va en la primera columna). Las demás hojas se ignoran. Copie el archivo a la carpeta `datos/` (no se sube a git) y ejecute:
+
+```
+docker compose run --rm --no-deps app python -m app.cli importar-proveedores /app/datos/ARCHIVO.xlsx --usuario admin
+docker compose run --rm --no-deps app python -m app.cli importar-proveedores /app/datos/ARCHIVO.xlsx --usuario admin --aplicar
+```
+
+- Sin `--aplicar` solo **simula** y muestra el resumen. Con `--aplicar` hace antes un respaldo y guarda todo en una sola transacción.
+- Cada proveedor se identifica por tipo + número de ID. Si ya existe se deja como está, así que se puede volver a correr sin duplicar ni pisar cambios hechos a mano.
+- Los marcados `OK` en la columna `REGISTRADO` entran **aprobados** (queda anotado en su historial); el resto queda **pendiente** de aprobación.
+- Lo que no se puede importar (ID vacío o con largo incorrecto, otra cuenta para el mismo ID, etc.) se omite y se lista por hoja y fila, sin mostrar datos personales. Un proveedor con dos cuentas distintas en el Excel entra con la de la primera fila; la otra debe revisarse a mano.
+- Un banco, un correo o un crédito que no se reconocen no impiden la importación: el proveedor entra sin ese dato y se avisa (el correo inválido queda en las notas). La pantalla «Validaciones» los muestra.
 
 ## Comandos de mantenimiento
 

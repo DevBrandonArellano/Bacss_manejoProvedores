@@ -47,7 +47,8 @@ def test_validaciones_del_formulario(sesion, personas):
     assert "13 dígitos" in errores(numero_id="09900000000A1")
     cedula = ayudas.tipo_id(sesion, "C").id
     assert "10 dígitos" in errores(tipo_id_id=cedula, numero_id="012345678")
-    assert errores(tipo_id_id=cedula, numero_id="0123456789") == ""
+    assert errores(tipo_id_id=cedula, numero_id="0123456782") == ""  # cédula con verificador correcto
+    assert "dígito verificador" in errores(tipo_id_id=cedula, numero_id="0123456789")
     assert "correo" in errores(numero_id="0990000000002", correo="sin-arroba.example")
     assert errores(numero_id="0990000000002", correo="a@uno.example; b@dos.example") == ""
     assert "tipo de cuenta" in errores(numero_id="0990000000002", tipo_cuenta_id=None)
@@ -185,8 +186,8 @@ def test_validaciones_detectan_datos_sospechosos(sesion, personas):
     assert grupos["sin_credito"] == {incompleto.id}
     assert grupos["correo_malo"] == {correo_malo.id}
     assert grupos["largo_id"] == {id_corto.id}
-    # el mismo correo en 3 proveedores (base, misma_cuenta, id_corto) se avisa
-    assert grupos["correo_compartido"] == {base.id, misma_cuenta.id, id_corto.id}
+    # un mismo correo en varios proveedores es normal (es el de quien compra y gestiona con ellos): no se avisa
+    assert "correo_compartido" not in grupos
     assert "id_duplicado" not in grupos
 
     avisos = {a["titulo"] for a in validaciones.avisos_de(sesion, incompleto)}

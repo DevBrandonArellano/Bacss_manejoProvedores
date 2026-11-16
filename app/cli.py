@@ -1,6 +1,8 @@
 """Comandos de mantenimiento.
 
     python -m app.cli cargar-catalogos [ruta.xlsx]   Agrega catálogos desde la hoja de catálogos del Excel
+    python -m app.cli importar-proveedores RUTA --usuario U [--aplicar]
+                                                     Importa proveedores desde un Excel (sin --aplicar solo simula)
     python -m app.cli respaldar                      Crea un respaldo de la base ahora
     python -m app.cli clave USUARIO                  Cambia la contraseña de un usuario (la pide por teclado)
 """
@@ -10,7 +12,7 @@ import sys
 
 from sqlalchemy import select
 
-from . import catalogos, config, db, seguridad, tareas
+from . import catalogos, config, db, importacion, seguridad, tareas
 from .modelos import Usuario
 from .servicios import ErrorNegocio
 
@@ -42,6 +44,56 @@ def cargar_catalogos(ruta: str = None) -> int:
     for texto in resumen.avisos:
         print("  AVISO: " + texto)
     return 0
+
+
+def importar_proveedores(ruta: str, nombre_usuario: str, aplicar: bool) -> int:
+    cfg, sesion = _abrir()
+    try:
+        u = sesion.scalars(select(Usuario).where(Usuario.usuario == nombre_usuario.strip().lower())).first()
+        if u is None or not u.activo:
+            print("ERROR: el usuario indicado no existe o está desactivado.")
+            return 1
+        try:
+            resumen = importacion.importar(sesion, ruta, u)
+        except FileNotFoundError:
+            print(f"ERROR: no existe el archivo {ruta}")
+            return 1
+        except ErrorNegocio as error:
+            print(f"ERROR: {error}")
+            return 1
+        print("SIMULACIÓN: no se guardará nada." if not aplicar else "IMPORTACIÓN REAL.")
+        for linea in resumen.lineas():
+            print("  " + linea)
+        if resumen.omitidos:
+            print("\nOmitidos (hoja, fila, motivo); busque la fila en el Excel:")
+            for hoja, fila, motivo in resumen.omitidos:
+                print(f"  - {hoja}, fila {fila}: {motivo}")
+        if resumen.avisos:
+            print("\nImportados con algo que revisar (hoja, fila):")
+            for hoja, fila, motivo in resumen.avisos:
+                print(f"  - {hoja}, fila {fila}: {motivo}")
+        if not aplicar:
+            sesion.rollback()
+            print("\nNo se guardó nada. Si el resultado es el esperado, repita el comando agregando --aplicar.")
+            return 0
+        if resumen.importados == 0:
+            sesion.rollback()
+            print("\nNo había proveedores nuevos que importar.")
+            return 0
+        if cfg.ruta_bd.is_file():
+            print(f"\nRespaldo previo: {tareas.respaldar().name}")
+        sesion.commit()
+        pendientes = resumen.importados - resumen.aprobados
+        print(
+            f"Listo: {resumen.importados} proveedores importados: {resumen.aprobados} ya aprobados (REGISTRADO = OK) "
+            f"y {pendientes} pendientes de aprobación por otra persona."
+        )
+        return 0
+    except Exception:
+        sesion.rollback()
+        raise
+    finally:
+        sesion.close()
 
 
 def respaldar() -> int:
@@ -83,12 +135,18 @@ def main(argumentos=None) -> int:
     comandos = analizador.add_subparsers(dest="comando", required=True)
     c = comandos.add_parser("cargar-catalogos", help="Agrega catálogos desde la hoja de catálogos del Excel")
     c.add_argument("ruta", nargs="?", help="Ruta del .xlsx (por defecto, RUTA_EXCEL)")
+    i = comandos.add_parser("importar-proveedores", help="Importa proveedores desde un Excel (simula si no se usa --aplicar)")
+    i.add_argument("ruta", help="Ruta del .xlsx")
+    i.add_argument("--usuario", required=True, help="Usuario que figura como creador de los proveedores")
+    i.add_argument("--aplicar", action="store_true", help="Guardar de verdad (sin esto solo se simula)")
     comandos.add_parser("respaldar", help="Crea un respaldo de la base de datos")
     k = comandos.add_parser("clave", help="Cambia la contraseña de un usuario")
     k.add_argument("usuario")
     args = analizador.parse_args(argumentos)
     if args.comando == "cargar-catalogos":
         return cargar_catalogos(args.ruta)
+    if args.comando == "importar-proveedores":
+        return importar_proveedores(args.ruta, args.usuario, args.aplicar)
     if args.comando == "respaldar":
         return respaldar()
     return cambiar_clave(args.usuario)

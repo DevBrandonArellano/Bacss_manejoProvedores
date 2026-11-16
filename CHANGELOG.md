@@ -31,6 +31,35 @@
 - **Despliegue**: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`, `requirements.txt`, `requirements-dev.txt`, `pytest.ini`.
 - **`.gitignore`**: excluye `datos/`, la base de datos, respaldos, `.env`, archivos Excel y el entorno virtual.
 
+### Sesión 9 · 2026-11-16 · Los aprobados salen de «Validaciones»
+
+- Decisión del usuario: una vez aprobado, el proveedor ya fue revisado y no debe aparecer en «Validaciones» (p. ej. un RUC de sociedad dudoso). Solo se listan los pendientes y rechazados.
+- Los duplicados (cuenta, ID, nombre) se siguen buscando contra **todos** los proveedores: un pendiente que repite la cuenta de uno aprobado sigue avisándose.
+- Si a un aprobado se le cambia un dato sensible vuelve a Pendiente y sus avisos reaparecen. La ficha tampoco muestra avisos de validación a los aprobados.
+- Pruebas: +1 → 209/209.
+
+### Sesión 8 · 2026-11-16 · Correos repetidos ya no se avisan
+
+- Decisión del usuario: varios proveedores comparten correo porque es el de la persona de compras, que gestiona los pagos directo con ellos. Se quitó el grupo «Mismo correo en varios proveedores» de «Validaciones» (eran 58 avisos de ruido sobre los 146 importados). Siguen los avisos de correo vacío o mal formado.
+
+### Sesión 7 · 2026-11-16 · Validación de cédula y RUC
+
+- Nuevo `app/identificacion.py`: cédula (módulo 10, provincia, tercer dígito), RUC de persona natural (cédula + establecimiento) y RUC de sociedades privadas/públicas (módulo 11). Reglas contrastadas con python-stdnum (`stdnum/ec/ci.py` y `ruc.py`); las otras fuentes consultadas (guías, gists, paquetes) no coincidían entre sí en el RUC de sociedades.
+- **Bloquea** (no se guarda): cédula y RUC de persona natural inválidos. **Solo avisa**: RUC de sociedades (6 y 9) y tercer dígito 7/8, porque el SRI no garantiza el módulo 11 y hay RUC reales que no lo cumplen (hilo de python-stdnum-users, 2021). Pasaportes no se revisan.
+- Pedido del usuario confirmado: en sociedades el RUC **nunca bloquea**; además de avisar al escribir, al guardar (alta o edición) se muestra una advertencia «se guardó igual; confírmelo en el SRI» y queda en «Validaciones» y en la ficha. Cubierto por prueba de punta a punta (208/208).
+- Conectado en tres lugares: al guardar (`servicios.validar_datos`), aviso en vivo en el formulario (`/proveedores/verificar`) y la pantalla «Validaciones» (dos grupos nuevos, también para lo ya guardado).
+- Efecto sobre los 146 proveedores importados (solo conteos): las 55 cédulas y los 2 RUC de persona natural son válidos; 84 de 89 RUC de sociedades cumplen el módulo 11 y 5 quedan como «dudosos» para confirmar en el SRI.
+- Pruebas: +26 (`tests/test_identificacion.py`, con números fabricados y los ejemplos públicos de python-stdnum) y 4 pruebas existentes ajustadas porque usaban números de prueba que ya no pasan el verificador → 207/207.
+- Sin verificar: contra la documentación oficial del SRI (no se encontró; solo fuentes secundarias y python-stdnum).
+
+### Sesión 6 · 2026-11-16 · Importación de proveedores desde Excel
+
+- Nuevo comando `python -m app.cli importar-proveedores RUTA --usuario U [--aplicar]` (módulo `app/importacion.py`): simula por defecto; con `--aplicar` respalda y guarda en una transacción. Detecta las hojas por encabezados y reutiliza el alta manual (historial y validaciones). Se puede repetir sin duplicar.
+- Decisión del usuario: lo marcado `OK` en REGISTRADO ya estaba aprobado → se importa **aprobado** (con constancia en el historial); lo demás, pendiente.
+- Carga real (libro «DATOS BANCARIOS PROVEEDORES», hojas RIBEL y HILTEXPOY): 227 filas con datos → **146 importados** (59 aprobados, 87 pendientes), 70 repetidos idénticos entre las dos hojas, 11 omitidos (2 sin tipo de ID, 2 sin número de ID, 1 RUC de largo incorrecto y 6 con otra cuenta/banco para un mismo ID). 5 importados con algo que revisar (2 bancos fuera del catálogo, 2 correos inválidos, 1 crédito no reconocido).
+- Pruebas: +11 (`tests/test_importacion.py`, con libros inventados) → 181/181.
+- Pendiente del usuario: decidir qué hacer con los 11 omitidos y con los proveedores que tienen dos cuentas (la app guarda una por proveedor).
+
 ### Sesión 5 · 2026-11-16 · Facturación oculta (solo proveedores)
 
 - Decisión del usuario: por ahora solo se registran proveedores; las funciones de facturación se ocultan **sin borrar código**.

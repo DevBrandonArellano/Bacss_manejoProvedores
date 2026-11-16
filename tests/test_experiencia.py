@@ -28,7 +28,7 @@ def test_listado_con_orden_y_paginas(equipo, ids_catalogo):
     creador = equipo["creador"]
     for i in range(55):
         _crear_proveedor(
-            creador, ids_catalogo, nombre=f"EMPRESA {i:02d}", numero_id=f"{1900000000000 + i}", numero_cuenta=f"{5000 + i}"
+            creador, ids_catalogo, nombre=f"EMPRESA {i:02d}", numero_id=f"179000{i:04d}001", numero_cuenta=f"{5000 + i}"
         )
     pagina1 = creador.get("/proveedores").text
     assert "Mostrando 1–50 de 55" in pagina1 and "Página 1 de 2" in pagina1
@@ -71,7 +71,7 @@ def test_aviso_de_identificacion_y_cuenta_repetidas(equipo, ids_catalogo):
     limpio = creador.get(
         "/proveedores/verificar", params={**base, "numero_id": "0190000000002", "numero_cuenta": "111"}, headers=HTMX
     ).text
-    assert "aviso" not in limpio
+    assert "Ya existe" not in limpio and "ya lo tiene" not in limpio
     # Es una pantalla para quien edita.
     assert equipo["aprobador"].get("/proveedores/verificar", params=base, headers=HTMX).status_code == 403
 

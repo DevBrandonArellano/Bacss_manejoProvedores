@@ -1,5 +1,5 @@
 {% for tipo, texto, otro in avisos %}
 <div class="aviso aviso-{{ tipo }}" role="status">
-  {{ texto }}: <a href="/proveedores/{{ otro.id }}" target="_blank" rel="noopener">{{ otro.nombre }}</a>.
+  {% if otro %}{{ texto }}: <a href="/proveedores/{{ otro.id }}" target="_blank" rel="noopener">{{ otro.nombre }}</a>.{% else %}{{ texto }}{% endif %}
 </div>
 {% endfor %}

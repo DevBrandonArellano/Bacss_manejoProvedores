@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from sqlalchemy import func, select
 
-from . import config, credito, seguridad
+from . import config, credito, identificacion, seguridad
 from .modelos import (
     ADMINISTRADOR,
     APROBADO,
@@ -267,6 +267,8 @@ def validar_datos(db, datos: dict, proveedor_id: int = None) -> List[str]:
         largo = LARGO_ID.get(tipo.codigo)
         if largo and not (numero_id.isdigit() and len(numero_id) == largo):
             errores.append(f"Un número de {tipo.nombre} debe tener {largo} dígitos.")
+        elif largo:
+            errores.extend(identificacion.revisar(tipo.codigo, numero_id).errores)
         consulta = select(Proveedor).where(Proveedor.tipo_id_id == tipo.id, Proveedor.numero_id == numero_id)
         if proveedor_id is not None:
             consulta = consulta.where(Proveedor.id != proveedor_id)
