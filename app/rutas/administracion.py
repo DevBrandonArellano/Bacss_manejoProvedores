@@ -9,7 +9,7 @@ from starlette.datastructures import UploadFile
 
 from .. import catalogos, config, servicios, tareas, validaciones
 from ..db import get_db
-from ..modelos import ROLES, Banco, Historial, Proveedor, TipoCuenta, TipoId, Usuario
+from ..modelos import ROLES, Banco, Empresa, Historial, Proveedor, TipoCuenta, TipoId, Usuario
 from ..servicios import ErrorNegocio
 from ..web import aviso, entero, es_htmx, ir, render, requiere_facturacion, solo_admin, usuario_actual
 
@@ -45,7 +45,10 @@ def pantalla_historial(
         consulta = consulta.where(Historial.sensible.is_(True))
     elif solo == "aprobaciones":
         consulta = consulta.where(Historial.tipo.in_(("aprobacion", "rechazo")))
-    movimientos = sesion.scalars(consulta.order_by(Historial.fecha.desc(), Historial.id.desc()).limit(500)).all()
+    visible = servicios.condicion_historial_visible(u)
+    if visible is not None:
+        consulta = consulta.where(visible)
+    movimientos =sesion.scalars(consulta.order_by(Historial.fecha.desc(), Historial.id.desc()).limit(500)).all()
     return render(request, "historial.html", movimientos=movimientos, filtros={"q": q, "solo": solo})
 
 
@@ -195,13 +198,51 @@ async def tipo_editar(
     return ir("/catalogos")
 
 
+# ---------------------------------------------------------------- empresas
+
+
+@router.get("/empresas")
+def pantalla_empresas(request: Request, u: Usuario = Depends(solo_admin), sesion: Session = Depends(get_db)):
+    empresas = sesion.scalars(select(Empresa).order_by(Empresa.activo.desc(), Empresa.nombre_norm)).all()
+    return render(request, "empresas.html", empresas=empresas)
+
+
+@router.post("/empresas/nueva")
+async def empresa_nueva(request: Request, u: Usuario = Depends(solo_admin), sesion: Session = Depends(get_db)):
+    formulario = await request.form()
+    try:
+        e = servicios.crear_empresa(sesion, str(formulario.get("nombre") or ""))
+        sesion.commit()
+        aviso(request, f"Empresa creada: {e.nombre}.")
+    except ErrorNegocio as error:
+        sesion.rollback()
+        aviso(request, str(error), "error")
+    return ir("/empresas")
+
+
+@router.post("/empresas/{eid}")
+async def empresa_editar(request: Request, eid: int, u: Usuario = Depends(solo_admin), sesion: Session = Depends(get_db)):
+    e = sesion.get(Empresa, eid)
+    if e is None:
+        raise HTTPException(status_code=404)
+    formulario = await request.form()
+    try:
+        servicios.actualizar_empresa(sesion, e, str(formulario.get("nombre") or ""), formulario.get("activo") == "1")
+        sesion.commit()
+        aviso(request, f"Empresa actualizada: {e.nombre}.")
+    except ErrorNegocio as error:
+        sesion.rollback()
+        aviso(request, str(error), "error")
+    return ir("/empresas")
+
+
 # ---------------------------------------------------------------- usuarios
 
 
 @router.get("/usuarios")
 def pantalla_usuarios(request: Request, u: Usuario = Depends(solo_admin), sesion: Session = Depends(get_db)):
     lista = sesion.scalars(select(Usuario).order_by(Usuario.usuario)).all()
-    return render(request, "usuarios.html", lista=lista)
+    return render(request, "usuarios.html", lista=lista, empresas=servicios.empresas_activas(sesion))
 
 
 @router.post("/usuarios/nuevo")
@@ -214,6 +255,7 @@ async def usuario_nuevo(request: Request, u: Usuario = Depends(solo_admin), sesi
             str(formulario.get("nombre") or ""),
             str(formulario.get("clave") or ""),
             str(formulario.get("rol") or ""),
+            entero(formulario.get("empresa_id")),
         )
         sesion.commit()
         aviso(request, f"Usuario creado: {nuevo.usuario} ({ROLES[nuevo.rol]}).")
@@ -237,6 +279,7 @@ async def usuario_editar(request: Request, uid: int, u: Usuario = Depends(solo_a
             str(formulario.get("rol") or ""),
             formulario.get("activo") == "1",
             str(formulario.get("clave") or ""),
+            entero(formulario.get("empresa_id")),
         )
         sesion.commit()
         aviso(request, f"Usuario actualizado: {objetivo.usuario}.")

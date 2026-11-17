@@ -54,7 +54,7 @@ def test_el_menu_no_muestra_facturas_ni_panel(sin_facturacion, equipo):
 def test_la_ficha_no_habla_de_facturas(sin_facturacion, equipo, ids_catalogo):
     pid = _crear_proveedor(equipo["creador"], ids_catalogo)
     texto = equipo["creador"].get(f"/proveedores/{pid}").text
-    assert "Pendiente de aprobación." in texto
+    assert "Pendiente de revisión." in texto
     assert "Registrar factura" not in texto and "<h2>Facturas</h2>" not in texto and "factura" not in texto.lower()
     assert "Historial de cambios" in texto and "Editar" in texto
 

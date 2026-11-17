@@ -21,7 +21,7 @@
     <a href="/proveedores" class="{{ 'activo' if ruta_actual.startswith('/proveedores') }}">Proveedores</a>
     {% if facturacion %}<a href="/facturas" class="{{ 'activo' if ruta_actual.startswith('/facturas') }}">Facturas</a>{% endif %}
     {% if usuario.puede_aprobar %}
-    <a href="/aprobaciones" class="{{ 'activo' if ruta_actual.startswith('/aprobaciones') }}">Aprobaciones{% if pendientes %}<span class="contador">{{ pendientes }}</span>{% endif %}</a>
+    <a href="/aprobaciones" class="{{ 'activo' if ruta_actual.startswith('/aprobaciones') }}">Revisiones{% if pendientes %}<span class="contador">{{ pendientes }}</span>{% endif %}</a>
     {% endif %}
     <details class="menu {{ 'activo' if ruta_actual.startswith(('/validaciones', '/historial')) }}">
       <summary>Control</summary>
@@ -31,10 +31,11 @@
       </div>
     </details>
     {% if usuario.es_admin %}
-    <details class="menu {{ 'activo' if ruta_actual.startswith(('/catalogos', '/usuarios', '/configuracion')) }}">
+    <details class="menu {{ 'activo' if ruta_actual.startswith(('/catalogos', '/empresas', '/usuarios', '/configuracion')) }}">
       <summary>Administración</summary>
       <div class="menu-lista">
         <a href="/catalogos" class="{{ 'activo' if ruta_actual.startswith('/catalogos') }}">Catálogos</a>
+        <a href="/empresas" class="{{ 'activo' if ruta_actual.startswith('/empresas') }}">Empresas</a>
         <a href="/usuarios" class="{{ 'activo' if ruta_actual.startswith('/usuarios') }}">Usuarios</a>
         <a href="/configuracion" class="{{ 'activo' if ruta_actual.startswith('/configuracion') }}">Configuración</a>
       </div>

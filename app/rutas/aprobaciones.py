@@ -1,4 +1,4 @@
-"""Aprobación de proveedores: la hace una persona distinta de quien los creó o modificó."""
+"""Revisión de proveedores: la hace una persona distinta de quien los creó o modificó."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -60,6 +60,7 @@ def pantalla(request: Request, u: Usuario = Depends(puede_aprobar), sesion: Sess
         aprobables=sum(1 for t in tarjetas if not t["bloqueo"]),
         rechazados=rechazados,
         decisiones=decisiones,
+        empresas_cols=servicios.empresas_visibles(sesion, u),
     )
 
 
@@ -79,9 +80,9 @@ async def aprobar_lote(request: Request, u: Usuario = Depends(puede_aprobar), se
             omitidos += 1
     sesion.commit()
     if aprobados:
-        aviso(request, f"Proveedores aprobados: {aprobados}.")
+        aviso(request, f"Proveedores revisados: {aprobados}.")
     if omitidos:
-        aviso(request, f"No se aprobaron {omitidos}: no están pendientes o usted los creó o modificó.", "alerta")
+        aviso(request, f"No se marcaron como revisados {omitidos}: no están pendientes o usted los creó o modificó.", "alerta")
     return ir("/aprobaciones")
 
 
@@ -93,7 +94,7 @@ async def aprobar(request: Request, pid: int, u: Usuario = Depends(puede_aprobar
     try:
         servicios.aprobar(sesion, p, u)
         sesion.commit()
-        aviso(request, f"Aprobado: {p.nombre}.")
+        aviso(request, f"Revisado: {p.nombre}.")
     except ErrorNegocio as error:
         sesion.rollback()
         aviso(request, str(error), "error")

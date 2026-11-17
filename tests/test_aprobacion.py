@@ -31,7 +31,7 @@ def test_el_aprobador_aprueba(sesion, personas):
     assert servicios.contar_pendientes(sesion) == 0
     decision = sesion.scalars(select(Historial).where(Historial.proveedor_id == p.id, Historial.tipo == "aprobacion")).one()
     assert decision.usuario_id == personas["aprobador"].id
-    assert decision.valor_nuevo == "Aprobado"
+    assert decision.valor_nuevo == "Revisado"
 
 
 def test_el_creador_no_puede_aprobar(sesion, personas):

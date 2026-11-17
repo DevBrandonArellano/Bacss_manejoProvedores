@@ -11,7 +11,7 @@
 <div class="tarjeta guia">
   <h2>Aún no hay proveedores</h2>
   <p class="suave">Aquí se llevan los datos de identificación, bancarios y de crédito de cada proveedor.
-    Cada proveedor nuevo debe ser aprobado por otra persona antes de poder pagarle.</p>
+    Cada proveedor nuevo debe ser revisado por otra persona antes de poder pagarle.</p>
   {% if usuario.puede_editar %}<a class="boton" href="/proveedores/nuevo">Registrar el primer proveedor</a>{% endif %}
 </div>
 {% else %}
@@ -19,8 +19,8 @@
   <table>
     <thead>
       <tr>
-        {{ cab("nombre", "Nombre") }}{{ cab("identificacion", "Identificación") }}{{ cab("banco", "Banco") }}<th>Cuenta</th><th>Crédito</th>
-        <th>Registrado en banco</th>{{ cab("aprobacion", "Aprobación") }}
+        {{ cab("nombre", "Nombre") }}{{ cab("identificacion", "Identificación") }}{{ cab("banco", "Banco") }}<th>Cuenta</th>{% for e in empresas_cols %}<th>Crédito {{ e.nombre }}</th>{% endfor %}
+        <th>Registrado en banco</th>{{ cab("aprobacion", "Revisión") }}
       </tr>
     </thead>
     <tbody>
@@ -33,12 +33,12 @@
         <td class="mono">{% if p.tipo_id %}{{ p.tipo_id.nombre }} {% endif %}{{ p.numero_id or "—" }}</td>
         <td>{{ p.banco.nombre if p.banco else "—" }}</td>
         <td class="mono">{% if p.tipo_cuenta %}{{ p.tipo_cuenta.codigo }} {% endif %}{{ (p.numero_cuenta|enmascarar) or "—" }}</td>
-        <td>{{ p.credito_texto }}</td>
+        {% for e in empresas_cols %}<td>{{ p.credito_texto_de(e.id) }}</td>{% endfor %}
         <td>{{ "Sí" if p.registrado_banco else "No" }}</td>
         <td><span class="insignia insignia-{{ p.estado_aprobacion }}">{{ p.estado_texto }}</span></td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="vacio">No hay proveedores que coincidan.
+      <tr><td colspan="{{ 6 + empresas_cols|length }}" class="vacio">No hay proveedores que coincidan.
         <div><a href="/proveedores">Quitar los filtros</a></div></td></tr>
       {% endfor %}
     </tbody>

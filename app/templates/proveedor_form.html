@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_credito_campos.html" as campos_credito with context %}
 {% block titulo %}{{ "Editar proveedor" if p else "Nuevo proveedor" }}{% endblock %}
 {% block contenido %}
 <div class="medio">
@@ -13,11 +14,11 @@
 
   {% if p and p.aprobado %}
   <div class="aviso aviso-alerta">
-    Este proveedor está aprobado. Si cambia el nombre, la identificación, la cuenta o el banco,
-    volverá a quedar <strong>pendiente</strong> hasta que otra persona lo apruebe.
+    Este proveedor está revisado. Si cambia el nombre, la identificación, la cuenta o el banco,
+    volverá a quedar <strong>pendiente</strong> hasta que otra persona lo revise.
   </div>
   {% elif not p %}
-  <div class="aviso aviso-alerta">El proveedor quedará <strong>pendiente</strong> hasta que otra persona lo apruebe.</div>
+  <div class="aviso aviso-alerta">El proveedor quedará <strong>pendiente</strong> hasta que otra persona lo revise.</div>
   {% endif %}
 
   <form method="post" action="{{ '/proveedores/' ~ p.id ~ '/editar' if p else '/proveedores/nuevo' }}" autocomplete="off">
@@ -92,34 +93,12 @@
     </div>
 
     <div class="tarjeta">
-      <h2>Contacto y crédito</h2>
+      <h2>Contacto</h2>
       <div class="rejilla">
         <div class="ancho-total">
           <label for="correo">Correo</label>
           <input type="text" id="correo" name="correo" value="{{ datos.correo or '' }}" maxlength="250" data-validar="correo" inputmode="email">
           <div class="ayuda">Si son varios, sepárelos con punto y coma.</div>
-        </div>
-        <div>
-          <label for="credito">Condición de crédito</label>
-          <select id="credito" name="credito">
-            <option value="" {{ 'selected' if opcion_credito == '' }}>— Sin definir —</option>
-            <option value="contado" {{ 'selected' if opcion_credito == 'contado' }}>Contado</option>
-            <option value="dias" {{ 'selected' if opcion_credito == 'dias' }}>Días desde la factura</option>
-            <option value="fin_mes" {{ 'selected' if opcion_credito == 'fin_mes' }}>Fin de mes</option>
-            <option value="dia_fijo" {{ 'selected' if opcion_credito == 'dia_fijo' }}>Día fijo de cada mes</option>
-          </select>
-        </div>
-        <div data-mostrar-si="credito=dias">
-          <label for="credito_dias">Días de crédito</label>
-          <input type="number" id="credito_dias" name="credito_dias" min="0" max="365"
-                 value="{{ datos.credito_valor if opcion_credito == 'dias' and datos.credito_valor is not none else '' }}">
-          <div class="ayuda">Cuántos días después de la fecha de la factura vence el pago.</div>
-        </div>
-        <div data-mostrar-si="credito=dia_fijo">
-          <label for="credito_dia">Día del mes</label>
-          <input type="number" id="credito_dia" name="credito_dia" min="1" max="31"
-                 value="{{ datos.credito_valor if opcion_credito == 'dia_fijo' and datos.credito_valor is not none else '' }}">
-          <div class="ayuda">Si la factura es posterior a ese día, vence el mes siguiente.</div>
         </div>
         <div class="ancho-total">
           <label for="notas">Notas</label>
@@ -127,6 +106,18 @@
         </div>
       </div>
     </div>
+
+    {% if empresa_credito %}
+    <div class="tarjeta">
+      <h2>Crédito con {{ empresa_credito.nombre }}</h2>
+      <p class="suave" style="margin-top:0">Es el crédito que su empresa tiene con este proveedor. Cada empresa registra el suyo.</p>
+      <div class="rejilla">
+        {{ campos_credito.campos("", opcion_credito, valor_credito) }}
+      </div>
+    </div>
+    {% elif not p %}
+    <p class="suave">El crédito se registra desde la ficha del proveedor, una vez guardado (uno por empresa).</p>
+    {% endif %}
 
     <div class="acciones">
       <button type="submit">Guardar</button>

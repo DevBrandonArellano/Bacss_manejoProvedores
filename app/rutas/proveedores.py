@@ -1,12 +1,15 @@
 """Proveedores: listado, búsqueda, alta, edición, desactivación y exportación."""
+from typing import Optional, Tuple
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .. import config, credito, exportacion, identificacion, servicios, validaciones
 from ..db import get_db
-from ..modelos import ESTADOS_APROBACION, Banco, Factura, Historial, Proveedor, TipoCuenta, TipoId, Usuario
+from ..modelos import CREADOR, ESTADOS_APROBACION, Banco, Empresa, Factura, Historial, Proveedor, TipoCuenta, TipoId, Usuario
+from ..servicios import ErrorNegocio
 from ..web import aviso, entero, es_htmx, ir, puede_editar, render, usuario_actual
 
 router = APIRouter()
@@ -99,18 +102,29 @@ def _opciones(sesion: Session, p: Proveedor = None) -> dict:
     }
 
 
-def _datos_formulario(formulario) -> dict:
+def _credito_de_formulario(formulario) -> Tuple[Optional[str], Optional[int]]:
+    """(tipo, valor) a partir de los campos `credito`, `credito_dias` y `credito_dia`."""
     opcion = str(formulario.get("credito") or "")
     if opcion == "contado":
-        tipo, valor = credito.DIAS, 0
-    elif opcion == credito.DIAS:
-        tipo, valor = credito.DIAS, entero(formulario.get("credito_dias"))
-    elif opcion == credito.DIA_FIJO:
-        tipo, valor = credito.DIA_FIJO, entero(formulario.get("credito_dia"))
-    elif opcion == credito.FIN_MES:
-        tipo, valor = credito.FIN_MES, None
-    else:
-        tipo, valor = None, None
+        return credito.DIAS, 0
+    if opcion == credito.DIAS:
+        return credito.DIAS, entero(formulario.get("credito_dias"))
+    if opcion == credito.DIA_FIJO:
+        return credito.DIA_FIJO, entero(formulario.get("credito_dia"))
+    if opcion == credito.FIN_MES:
+        return credito.FIN_MES, None
+    return None, None
+
+
+def _opcion_credito(tipo, valor) -> str:
+    """Opción del desplegable de crédito que corresponde a (tipo, valor)."""
+    if tipo == credito.DIAS and not valor:
+        return "contado" if valor == 0 else credito.DIAS
+    return tipo or ""
+
+
+def _datos_formulario(formulario) -> dict:
+    """Datos compartidos del proveedor. El crédito va aparte: es de cada empresa."""
     notas = str(formulario.get("notas") or "").strip() or None
     return {
         "nombre": servicios.limpiar(formulario.get("nombre")),
@@ -120,17 +134,9 @@ def _datos_formulario(formulario) -> dict:
         "numero_cuenta": servicios.sin_espacios(formulario.get("numero_cuenta")),
         "banco_id": entero(formulario.get("banco_id")),
         "correo": servicios.limpiar(formulario.get("correo")),
-        "credito_tipo": tipo,
-        "credito_valor": valor,
         "registrado_banco": formulario.get("registrado_banco") == "1",
         "notas": notas,
     }
-
-
-def _opcion_credito(datos: dict) -> str:
-    if datos.get("credito_tipo") == credito.DIAS and not datos.get("credito_valor"):
-        return "contado" if datos.get("credito_valor") == 0 else credito.DIAS
-    return datos.get("credito_tipo") or ""
 
 
 def _datos_de(p: Proveedor) -> dict:
@@ -142,24 +148,37 @@ def _datos_de(p: Proveedor) -> dict:
         "numero_cuenta": p.numero_cuenta,
         "banco_id": p.banco_id,
         "correo": p.correo,
-        "credito_tipo": p.credito_tipo,
-        "credito_valor": p.credito_valor,
         "registrado_banco": p.registrado_banco,
         "notas": p.notas,
     }
 
 
-def _formulario(request: Request, sesion: Session, datos: dict, p: Proveedor = None, errores=None, status_code=200):
+def _formulario(
+    request: Request, sesion: Session, datos: dict, p: Proveedor = None, errores=None, status_code=200,
+    credito_alta=(None, None),
+):
+    """Formulario de alta (con el crédito de la empresa del creador) o de edición (sin crédito)."""
+    u = request.state.usuario
     return render(
         request,
         "proveedor_form.html",
         status_code=status_code,
         p=p,
         datos=datos,
-        opcion_credito=_opcion_credito(datos),
+        empresa_credito=servicios.empresa_de(u) if (p is None and u.rol == CREADOR) else None,
+        opcion_credito=_opcion_credito(*credito_alta),
+        valor_credito=credito_alta[1],
         errores=errores or [],
         **_opciones(sesion, p),
     )
+
+
+def _creador_sin_empresa(request: Request, u: Usuario) -> bool:
+    """Un creador sin empresa activa no puede registrar proveedores; se le avisa."""
+    if u.rol == CREADOR and servicios.empresa_de(u) is None:
+        aviso(request, "Su usuario no tiene empresa asignada. Pídale al administrador que se la asigne.", "error")
+        return True
+    return False
 
 
 def _avisar_si_el_ruc_es_dudoso(request: Request, sesion: Session, p: Proveedor) -> None:
@@ -194,7 +213,9 @@ def listado(
     total = sesion.scalar(select(func.count()).select_from(consulta.subquery())) or 0
     paginas = max(1, -(-total // POR_PAGINA))
     actual = min(max(entero(pagina) or 1, 1), paginas)
-    proveedores = sesion.scalars(consulta.offset((actual - 1) * POR_PAGINA).limit(POR_PAGINA)).all()
+    proveedores = sesion.scalars(
+        consulta.options(selectinload(Proveedor.creditos)).offset((actual - 1) * POR_PAGINA).limit(POR_PAGINA)
+    ).all()
     filtros = {
         "q": q, "banco": banco, "aprobacion": aprobacion, "estado": estado, "registrado": registrado,
         "orden": orden, "dir": dir,
@@ -208,6 +229,7 @@ def listado(
         "desde": (actual - 1) * POR_PAGINA + 1 if total else 0,
         "hasta": min(actual * POR_PAGINA, total),
         "hay_proveedores": total > 0 or sesion.scalar(select(func.count(Proveedor.id))) > 0,
+        "empresas_cols": servicios.empresas_visibles(sesion, u),
     }
     if es_htmx(request):
         return render(request, "_proveedores_tabla.html", **contexto)
@@ -230,7 +252,8 @@ def exportar(
     sesion: Session = Depends(get_db),
 ):
     proveedores = _filtrar(sesion, q, banco, aprobacion, estado, registrado, orden, dir)
-    contenido = exportacion.a_bytes(exportacion.libro_proveedores(proveedores))
+    empresas = servicios.empresas_visibles(sesion, u)
+    contenido = exportacion.a_bytes(exportacion.libro_proveedores(proveedores, empresas))
     nombre = f"proveedores-{config.ahora():%Y%m%d-%H%M}.xlsx"
     return Response(contenido, media_type=XLSX, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
 
@@ -260,7 +283,15 @@ def verificar(
         if otro is not None:
             consulta = consulta.where(Proveedor.id != otro)
         repetido = sesion.scalars(consulta).first()
-        if repetido is not None:
+        if repetido is not None and otro is None:
+            # En el alta no es un error: al guardar se reconoce el proveedor y solo se añade el crédito.
+            if u.rol == CREADOR:
+                texto = (f"Ese {tipo.nombre} ya está registrado. Al guardar solo se añadirá el crédito de su empresa; "
+                         "ábralo para ver o corregir los demás datos")
+            else:
+                texto = f"Ese {tipo.nombre} ya está registrado; ábralo para ver o corregir sus datos"
+            avisos.append(("alerta", texto, repetido))
+        elif repetido is not None:
             avisos.append(("error", f"Ya existe un proveedor con ese {tipo.nombre}", repetido))
     numero_cuenta = servicios.sin_espacios(numero_cuenta)
     if numero_cuenta:
@@ -275,18 +306,54 @@ def verificar(
 
 @router.get("/proveedores/nuevo")
 def pantalla_nuevo(request: Request, u: Usuario = Depends(puede_editar), sesion: Session = Depends(get_db)):
+    if _creador_sin_empresa(request, u):
+        return ir("/proveedores")
     return _formulario(request, sesion, {"registrado_banco": False})
+
+
+def _agregar_a_existente(request: Request, sesion: Session, p: Proveedor, u: Usuario, tipo, valor):
+    """Alta de un proveedor que ya existe: no se toca ningún dato compartido, solo el crédito de la empresa del creador."""
+    empresa = servicios.empresa_de(u) if u.rol == CREADOR else None
+    if empresa is not None and tipo:
+        try:
+            servicios.guardar_credito(sesion, p, empresa, tipo, valor, u)  # siempre la empresa del usuario
+        except ErrorNegocio as error:
+            sesion.rollback()
+            aviso(request, f"Ese proveedor ya estaba registrado, pero no se guardó el crédito: {error}", "error")
+            return ir(f"/proveedores/{p.id}")
+        sesion.commit()
+        mensaje = ("Ese proveedor ya estaba registrado: se añadió el crédito de su empresa. "
+                   "Los demás datos no se cambiaron; use Editar si hay que corregirlos.")
+    else:
+        mensaje = "Ese proveedor ya estaba registrado. No se cambió ningún dato; use Editar si hay que corregirlos."
+    if not p.activo:
+        mensaje += " Atención: el proveedor está desactivado."
+    aviso(request, mensaje, "alerta")
+    return ir(f"/proveedores/{p.id}")
 
 
 @router.post("/proveedores/nuevo")
 async def crear(request: Request, u: Usuario = Depends(puede_editar), sesion: Session = Depends(get_db)):
-    datos = _datos_formulario(await request.form())
+    if _creador_sin_empresa(request, u):
+        return ir("/proveedores")
+    formulario = await request.form()
+    datos = _datos_formulario(formulario)
+    tipo, valor = _credito_de_formulario(formulario)
+    existente = servicios.proveedor_por_id(sesion, datos["tipo_id_id"], datos["numero_id"])
+    if existente is not None:
+        return _agregar_a_existente(request, sesion, existente, u, tipo, valor)
+    empresa = servicios.empresa_de(u) if u.rol == CREADOR else None
     errores = servicios.validar_datos(sesion, datos)
+    error_credito = credito.validar(tipo, valor) if empresa is not None else None
+    if error_credito:
+        errores.append(error_credito)
     if errores:
-        return _formulario(request, sesion, datos, errores=errores, status_code=400)
+        return _formulario(request, sesion, datos, errores=errores, status_code=400, credito_alta=(tipo, valor))
     p = servicios.crear_proveedor(sesion, datos, u)
+    if empresa is not None and tipo:
+        servicios.guardar_credito(sesion, p, empresa, tipo, valor, u)
     sesion.commit()
-    aviso(request, "Proveedor creado. Queda pendiente hasta que otra persona lo apruebe.")
+    aviso(request, "Proveedor creado. Queda pendiente hasta que otra persona lo revise.")
     _avisar_si_el_ruc_es_dudoso(request, sesion, p)
     return ir(f"/proveedores/{p.id}")
 
@@ -294,9 +361,11 @@ async def crear(request: Request, u: Usuario = Depends(puede_editar), sesion: Se
 @router.get("/proveedores/{pid}")
 def ficha(request: Request, pid: int, u: Usuario = Depends(usuario_actual), sesion: Session = Depends(get_db)):
     p = _proveedor(sesion, pid)
-    historial = sesion.scalars(
-        select(Historial).where(Historial.proveedor_id == p.id).order_by(Historial.fecha.desc(), Historial.id.desc()).limit(300)
-    ).all()
+    consulta = select(Historial).where(Historial.proveedor_id == p.id)
+    visible = servicios.condicion_historial_visible(u)
+    if visible is not None:
+        consulta = consulta.where(visible)
+    historial = sesion.scalars(consulta.order_by(Historial.fecha.desc(), Historial.id.desc()).limit(300)).all()
     facturas = []
     if config.actual.facturacion_activa:
         facturas = sesion.scalars(
@@ -310,7 +379,46 @@ def ficha(request: Request, pid: int, u: Usuario = Depends(usuario_actual), sesi
         facturas=facturas,
         avisos=validaciones.avisos_de(sesion, p),
         bloqueo_aprobar=servicios.motivo_no_puede_aprobar(p, u),
+        creditos=_creditos_ficha(sesion, p, u),
+        creador_sin_empresa=u.rol == CREADOR and servicios.empresa_de(u) is None,
     )
+
+
+def _creditos_ficha(sesion: Session, p: Proveedor, u: Usuario) -> list:
+    """Una fila por empresa que `u` puede ver: su crédito con `p` y si puede cambiarlo."""
+    filas = []
+    for e in servicios.empresas_visibles(sesion, u):
+        fila = p.credito_de(e.id)
+        tipo, valor = (fila.credito_tipo, fila.credito_valor) if fila is not None else (None, None)
+        filas.append({
+            "empresa": e,
+            "texto": p.credito_texto_de(e.id),
+            "opcion": _opcion_credito(tipo, valor),
+            "valor": valor,
+            "editable": servicios.puede_editar_credito(u, e.id),
+        })
+    return filas
+
+
+@router.post("/proveedores/{pid}/credito")
+async def guardar_credito(request: Request, pid: int, u: Usuario = Depends(puede_editar), sesion: Session = Depends(get_db)):
+    p = _proveedor(sesion, pid)
+    formulario = await request.form()
+    empresa_id = entero(formulario.get("empresa_id"))
+    if empresa_id is None or not servicios.puede_editar_credito(u, empresa_id):
+        raise HTTPException(status_code=403)
+    empresa = sesion.get(Empresa, empresa_id)
+    if empresa is None:
+        raise HTTPException(status_code=404)
+    tipo, valor = _credito_de_formulario(formulario)
+    try:
+        cambio = servicios.guardar_credito(sesion, p, empresa, tipo, valor, u)
+        sesion.commit()
+        aviso(request, "Crédito guardado." if cambio else "No había cambios que guardar.", "ok" if cambio else "alerta")
+    except ErrorNegocio as error:
+        sesion.rollback()
+        aviso(request, str(error), "error")
+    return ir(f"/proveedores/{p.id}")
 
 
 @router.get("/proveedores/{pid}/editar")
@@ -332,7 +440,7 @@ async def editar(request: Request, pid: int, u: Usuario = Depends(puede_editar),
     if not cambios:
         aviso(request, "No había cambios que guardar.", "alerta")
     elif p.estado_aprobacion != estado_antes:
-        aviso(request, "Cambios guardados. El proveedor vuelve a quedar pendiente de aprobación.", "alerta")
+        aviso(request, "Cambios guardados. El proveedor vuelve a quedar pendiente de revisión.", "alerta")
     else:
         aviso(request, "Cambios guardados.")
     _avisar_si_el_ruc_es_dudoso(request, sesion, p)

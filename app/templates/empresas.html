@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block titulo %}Empresas{% endblock %}
+{% block contenido %}
+<div class="cabecera"><h1>Empresas</h1></div>
+
+<p class="suave">
+  Cada creador trabaja para una empresa y registra el crédito que esa empresa tiene con cada proveedor.
+  El proveedor es uno solo para todas. Una empresa desactivada deja de mostrarse en las pantallas,
+  pero sus créditos se conservan y reaparecen al activarla de nuevo.
+</p>
+
+<div class="tarjeta">
+  <h2>Lista de empresas</h2>
+  <table>
+    <thead><tr><th>Nombre</th><th>Activa</th><th></th></tr></thead>
+    <tbody>
+      {% for e in empresas %}
+      <tr class="{{ 'inactivo' if not e.activo }}">
+        <td><input type="text" form="empresa-{{ e.id }}" name="nombre" value="{{ e.nombre }}" maxlength="120" required aria-label="Nombre"></td>
+        <td><input type="checkbox" form="empresa-{{ e.id }}" name="activo" value="1" {{ 'checked' if e.activo }} aria-label="Activa"></td>
+        <td>
+          <form method="post" action="/empresas/{{ e.id }}" id="empresa-{{ e.id }}" class="en-linea">
+            <input type="hidden" name="csrf_token" value="{{ csrf }}">
+            <button type="submit" class="boton-chico boton-claro">Guardar</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="vacio">Aún no hay empresas. Cree la primera abajo.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <hr class="separador">
+  <form method="post" action="/empresas/nueva" class="en-linea">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="text" name="nombre" placeholder="Nombre de la empresa" maxlength="120" required aria-label="Nombre de la empresa">
+    <button type="submit" class="boton-chico">Agregar</button>
+  </form>
+</div>
+{% endblock %}

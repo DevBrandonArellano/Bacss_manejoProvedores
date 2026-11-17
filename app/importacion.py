@@ -19,7 +19,7 @@ from sqlalchemy import select
 
 from . import config, credito, servicios
 from .catalogos import texto_codigo
-from .modelos import APROBADO, Banco, Proveedor, TipoCuenta, TipoId, Usuario
+from .modelos import APROBADO, Banco, Empresa, Proveedor, TipoCuenta, TipoId, Usuario
 from .servicios import ErrorNegocio, limpiar, normalizar, partes_correo, sin_espacios
 
 OBLIGATORIAS = {"TIPO ID", "NUMERO ID", "TIPO CTA", "NUMERO CTA", "BANCOS"}
@@ -36,18 +36,26 @@ class Resumen:
     repetidos: int = 0
     omitidos: List[Tuple[str, int, str]] = field(default_factory=list)  # (hoja, fila, motivo)
     avisos: List[Tuple[str, int, str]] = field(default_factory=list)  # importado, pero con algo que revisar
+    creditos: int = 0  # créditos guardados para la empresa indicada
+    con_empresa: bool = False
 
     def lineas(self) -> List[str]:
+        creditos = (
+            f"Créditos importados: {self.creditos}"
+            if self.con_empresa
+            else "Créditos del Excel: no importados (indique --empresa)"
+        )
         return [
             f"Hojas leídas: {', '.join(self.hojas) or '(ninguna)'}",
             f"Filas con datos de proveedor: {self.filas_con_datos}",
             f"Importados: {self.importados}",
-            f"  - ya aprobados (REGISTRADO = OK en el Excel): {self.aprobados}",
-            f"  - pendientes de aprobación: {self.importados - self.aprobados}",
+            f"  - ya revisados (REGISTRADO = OK en el Excel): {self.aprobados}",
+            f"  - pendientes de revisión: {self.importados - self.aprobados}",
             f"Ya existían en la base (sin cambios): {self.ya_existian}",
             f"Repetidos en el propio Excel con los mismos datos: {self.repetidos}",
             f"Omitidos: {len(self.omitidos)}",
             f"Importados con algo que revisar: {len(self.avisos)}",
+            creditos,
         ]
 
 
@@ -188,7 +196,7 @@ def _aprobar_por_excel(db, p: Proveedor, usuario: Usuario) -> None:
     p.aprobado_en = config.ahora()
     p.motivo_rechazo = None
     servicios._registrar(
-        db, p, usuario, "aprobacion", "Estado de aprobación", "Pendiente", "Aprobado (según el Excel: REGISTRADO = OK)"
+        db, p, usuario, "aprobacion", "Estado de revisión", "Pendiente", "Revisado (según el Excel: REGISTRADO = OK)"
     )
 
 
@@ -199,9 +207,13 @@ def _firma(datos: dict) -> tuple:
 # ---------------------------------------------------------------- importación
 
 
-def importar(db, ruta, usuario: Usuario) -> Resumen:
-    """Crea los proveedores del Excel. No hace commit: quien llama decide (guardar o descartar)."""
-    resumen = Resumen()
+def importar(db, ruta, usuario: Usuario, empresa: Optional[Empresa] = None) -> Resumen:
+    """Crea los proveedores del Excel. No hace commit: quien llama decide (guardar o descartar).
+
+    El crédito del Excel es de una empresa: solo se guarda si se indica `empresa`. Los proveedores que ya
+    existían no se tocan (tampoco su crédito).
+    """
+    resumen = Resumen(con_empresa=empresa is not None)
     hojas = leer_hojas(ruta)
     if not hojas:
         raise ErrorNegocio(
@@ -281,8 +293,6 @@ def importar(db, ruta, usuario: Usuario) -> Resumen:
                 "numero_cuenta": numero_cta,
                 "banco_id": banco.id if banco else None,
                 "correo": correo,
-                "credito_tipo": tipo_cred,
-                "credito_valor": valor_cred,
                 "registrado_banco": normalizar(_texto_celda(_celda(fila, cols, "registrado"))) == "OK",
                 "notas": "\n".join(t for t in notas if t) or None,
             }
@@ -304,10 +314,16 @@ def importar(db, ruta, usuario: Usuario) -> Resumen:
                 continue
 
             errores = servicios.validar_datos(db, datos)
+            error_credito = credito.validar(tipo_cred, valor_cred)  # p. ej. 400 días: se omite, como antes
+            if error_credito:
+                errores.append(error_credito)
             if errores:
                 omitir(" ".join(errores))
                 continue
             p = servicios.crear_proveedor(db, datos, usuario)
+            if empresa is not None and tipo_cred:
+                if servicios.aplicar_credito(db, p, empresa, tipo_cred, valor_cred, usuario):
+                    resumen.creditos += 1
             vistos[clave_prov] = (nombre_hoja, n, _firma(datos), p)
             resumen.importados += 1
             if datos["registrado_banco"]:

@@ -1,7 +1,7 @@
 """Comandos de mantenimiento.
 
     python -m app.cli cargar-catalogos [ruta.xlsx]   Agrega catálogos desde la hoja de catálogos del Excel
-    python -m app.cli importar-proveedores RUTA --usuario U [--aplicar]
+    python -m app.cli importar-proveedores RUTA --usuario U [--empresa NOMBRE] [--aplicar]
                                                      Importa proveedores desde un Excel (sin --aplicar solo simula)
     python -m app.cli respaldar                      Crea un respaldo de la base ahora
     python -m app.cli clave USUARIO                  Cambia la contraseña de un usuario (la pide por teclado)
@@ -12,7 +12,7 @@ import sys
 
 from sqlalchemy import select
 
-from . import catalogos, config, db, importacion, seguridad, tareas
+from . import catalogos, config, db, importacion, seguridad, servicios, tareas
 from .modelos import Usuario
 from .servicios import ErrorNegocio
 
@@ -46,15 +46,22 @@ def cargar_catalogos(ruta: str = None) -> int:
     return 0
 
 
-def importar_proveedores(ruta: str, nombre_usuario: str, aplicar: bool) -> int:
+def importar_proveedores(ruta: str, nombre_usuario: str, aplicar: bool, nombre_empresa: str = None) -> int:
     cfg, sesion = _abrir()
     try:
         u = sesion.scalars(select(Usuario).where(Usuario.usuario == nombre_usuario.strip().lower())).first()
         if u is None or not u.activo:
             print("ERROR: el usuario indicado no existe o está desactivado.")
             return 1
+        empresa = None
+        if nombre_empresa is not None:
+            buscada = servicios.normalizar(nombre_empresa)
+            empresa = next((e for e in servicios.empresas_activas(sesion) if e.nombre_norm == buscada), None)
+            if empresa is None:
+                print("ERROR: la empresa indicada no existe; créela antes en Administración → Empresas.")
+                return 1
         try:
-            resumen = importacion.importar(sesion, ruta, u)
+            resumen = importacion.importar(sesion, ruta, u, empresa)
         except FileNotFoundError:
             print(f"ERROR: no existe el archivo {ruta}")
             return 1
@@ -85,8 +92,8 @@ def importar_proveedores(ruta: str, nombre_usuario: str, aplicar: bool) -> int:
         sesion.commit()
         pendientes = resumen.importados - resumen.aprobados
         print(
-            f"Listo: {resumen.importados} proveedores importados: {resumen.aprobados} ya aprobados (REGISTRADO = OK) "
-            f"y {pendientes} pendientes de aprobación por otra persona."
+            f"Listo: {resumen.importados} proveedores importados: {resumen.aprobados} ya revisados (REGISTRADO = OK) "
+            f"y {pendientes} pendientes de revisión por otra persona."
         )
         return 0
     except Exception:
@@ -139,6 +146,7 @@ def main(argumentos=None) -> int:
     i.add_argument("ruta", help="Ruta del .xlsx")
     i.add_argument("--usuario", required=True, help="Usuario que figura como creador de los proveedores")
     i.add_argument("--aplicar", action="store_true", help="Guardar de verdad (sin esto solo se simula)")
+    i.add_argument("--empresa", help="Empresa a la que pertenece el crédito del Excel (sin esto no se importa el crédito)")
     comandos.add_parser("respaldar", help="Crea un respaldo de la base de datos")
     k = comandos.add_parser("clave", help="Cambia la contraseña de un usuario")
     k.add_argument("usuario")
@@ -146,7 +154,7 @@ def main(argumentos=None) -> int:
     if args.comando == "cargar-catalogos":
         return cargar_catalogos(args.ruta)
     if args.comando == "importar-proveedores":
-        return importar_proveedores(args.ruta, args.usuario, args.aplicar)
+        return importar_proveedores(args.ruta, args.usuario, args.aplicar, args.empresa)
     if args.comando == "respaldar":
         return respaldar()
     return cambiar_clave(args.usuario)

@@ -31,6 +31,24 @@
 - **Despliegue**: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`, `requirements.txt`, `requirements-dev.txt`, `pytest.ini`.
 - **`.gitignore`**: excluye `datos/`, la base de datos, respaldos, `.env`, archivos Excel y el entorno virtual.
 
+### Sesión 10 · 2026-11-17 · Empresas, crédito por empresa y «Revisión»
+
+Plan: `docs/superpowers/plans/2026-11-17-empresas-credito-revision.md` (spec en `docs/superpowers/specs/`). Rama `feat/empresas-credito-revision`, sin commit.
+
+- **«Aprobación» → «Revisión» (solo lo visible)**: menú y pantalla «Revisiones», perfil «Revisor», estado «Revisado», botón «Marcar como revisado», mensajes, historial («Estado de revisión»), importador, CLI y la columna `ESTADO REVISION` de la exportación de proveedores. No cambian rutas (`/aprobaciones`), clases CSS, funciones ni valores guardados (`"aprobado"`). Una prueba recorre las pantallas y falla si aparece «aprob…» en el texto visible.
+- **Empresas**: tabla nueva `empresas`; pantalla Administración → Empresas (crear, renombrar, desactivar; el nombre no se repite sin importar mayúsculas ni tildes).
+- **Empresa por usuario**: `usuarios.empresa_id`. Obligatoria para el creador activo; solo el creador la guarda. Columna «Empresa» en Usuarios.
+- **Crédito por empresa**: tabla nueva `proveedor_creditos` (una fila por proveedor y empresa). El creador ve y cambia solo el de su empresa (comprobado en el servidor; un `empresa_id` manipulado se rechaza con 403 o se ignora); el revisor ve todos y no cambia ninguno; el administrador cambia cualquiera desde la ficha. El crédito **no** es dato sensible: cambiarlo no reabre la revisión. Queda en el historial como «Crédito · EMPRESA».
+- **Alta de un proveedor ya registrado** (mismo tipo y número de ID, también con espacios): no se crea otro ni se cambian sus datos; solo se añade el crédito de la empresa del creador y se abre su ficha, avisando si está desactivado. El formulario lo avisa mientras se escribe.
+- **El formulario de proveedor ya no lleva el crédito**, salvo el alta de un creador («Crédito con <su empresa>»). Editar un proveedor no toca el crédito. Ficha con la tarjeta «Crédito por empresa».
+- **Revisor**: listado con una columna de crédito por empresa activa; «Revisiones» muestra «EMPRESA: crédito» por cada una; la exportación de proveedores trae `CREDITO <EMPRESA>` después de `CORREO` y ya no `DIAS CREDITO`. Una empresa desactivada desaparece de las columnas y sus créditos reaparecen al activarla.
+- **Historial**: el creador no ve los cambios de crédito de otras empresas (ficha y «Historial de cambios»).
+- **Validaciones**: «Sin crédito en ninguna empresa» reemplaza a «Sin condición de crédito».
+- **Importación**: nueva opción `--empresa NOMBRE`; el crédito del Excel se guarda para esa empresa. Sin `--empresa` se importan los proveedores sin crédito y el resumen lo dice; una empresa inexistente da error.
+- Pruebas: +29 en 5 archivos nuevos (`test_revision_textos`, `test_empresas`, `test_credito_empresas`, `test_proveedor_empresas`, `test_vistas_revisor`) y 3 en `test_importacion`; aserciones antiguas ajustadas a los textos y al crédito por empresa. Las pruebas corren en un `.venv` local con `requirements-dev.txt`.
+- **Pendiente — facturación por empresa**: la facturación (apagada) sigue calculando vencimientos con las columnas antiguas `proveedores.credito_tipo/credito_valor`, que ninguna pantalla escribe ya. Se retoma cuando se reactive la facturación.
+- **Pendiente — migración de datos**: **no hay migración**. Esta versión necesita una base nueva; **no arrancarla contra la base anterior** (le falta `usuarios.empresa_id`). Las columnas antiguas de crédito se conservan para no perder los créditos ya importados cuando se defina la migración.
+
 ### Sesión 9 · 2026-11-16 · Los aprobados salen de «Validaciones»
 
 - Decisión del usuario: una vez aprobado, el proveedor ya fue revisado y no debe aparecer en «Validaciones» (p. ej. un RUC de sociedad dudoso). Solo se listan los pendientes y rechazados.

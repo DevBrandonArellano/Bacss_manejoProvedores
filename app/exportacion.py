@@ -43,7 +43,7 @@ def motivo_bloqueo(f: Factura) -> Optional[str]:
     if not p.activo:
         return "El proveedor está desactivado."
     if not p.aprobado:
-        return f"El proveedor no está aprobado (estado: {p.estado_texto})."
+        return f"El proveedor no está revisado (estado: {p.estado_texto})."
     faltan = []
     if not p.numero_cuenta:
         faltan.append("número de cuenta")
@@ -120,7 +120,6 @@ def libro_pago_masivo(facturas: List[Factura], contrapartida: str) -> Workbook:
 
 ENCABEZADOS_PROVEEDORES = [
     "NOMBRE",
-    "DIAS CREDITO",
     "REGISTRADO",
     "TIPO ID",
     "NUMERO ID",
@@ -129,24 +128,34 @@ ENCABEZADOS_PROVEEDORES = [
     "BANCO",
     "CODIGO BANCO",
     "CORREO",
-    "ESTADO APROBACION",
+    "ESTADO REVISION",
     "ACTIVO",
     "NOTAS",
 ]
 
 
-def libro_proveedores(proveedores: List[Proveedor]) -> Workbook:
+def libro_proveedores(proveedores: List[Proveedor], empresas=()) -> Workbook:
+    """Listado de proveedores con una columna de crédito por empresa, después de CORREO."""
     libro = Workbook()
     hoja = libro.active
     hoja.title = "Proveedores"
-    hoja.append(ENCABEZADOS_PROVEEDORES)
+    posicion = ENCABEZADOS_PROVEEDORES.index("CORREO") + 1
+    encabezados = (
+        ENCABEZADOS_PROVEEDORES[:posicion]
+        + [f"CREDITO {e.nombre}" for e in empresas]
+        + ENCABEZADOS_PROVEEDORES[posicion:]
+    )
+    hoja.append(encabezados)
     for celda in hoja[1]:
         celda.font = Font(bold=True)
     for p in proveedores:
+        creditos = []
+        for e in empresas:
+            fila = p.credito_de(e.id)
+            creditos.append(credito.texto_excel(fila.credito_tipo, fila.credito_valor) if fila is not None else "")
         hoja.append(
             [
                 p.nombre,
-                credito.texto_excel(p.credito_tipo, p.credito_valor),
                 "OK" if p.registrado_banco else "",
                 p.tipo_id.nombre if p.tipo_id else "",
                 p.numero_id or "",
@@ -155,6 +164,7 @@ def libro_proveedores(proveedores: List[Proveedor]) -> Workbook:
                 p.banco.nombre if p.banco else "",
                 p.banco.codigo if p.banco else "",
                 p.correo or "",
+                *creditos,
                 p.estado_texto,
                 "SI" if p.activo else "NO",
                 p.notas or "",
@@ -165,7 +175,7 @@ def libro_proveedores(proveedores: List[Proveedor]) -> Workbook:
             celda.number_format = "@"
             celda.value = "" if celda.value is None else str(celda.value)
             celda.data_type = "s"
-    _anchos(hoja, ENCABEZADOS_PROVEEDORES)
+    _anchos(hoja, encabezados)
     return libro
 
 

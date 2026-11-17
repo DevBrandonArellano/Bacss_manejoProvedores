@@ -28,7 +28,7 @@
     </select>
   </div>
   <div>
-    <label for="aprobacion">Aprobación</label>
+    <label for="aprobacion">Revisión</label>
     <select id="aprobacion" name="aprobacion" {{ vivo }} hx-trigger="change">
       <option value="">Todas</option>
       {% for clave, texto in ESTADOS_APROBACION.items() %}
