@@ -290,7 +290,8 @@ def _mostrar(db, campo: str, valor) -> str:
     return str(valor)
 
 
-def _registrar(db, p: Proveedor, usuario: Usuario, tipo: str, campo: str, anterior, nuevo, sensible=False) -> None:
+def _registrar(db, p: Proveedor, usuario: Usuario, tipo: str, campo: str, anterior, nuevo, sensible=False,
+               empresa_id: Optional[int] = None) -> None:
     db.add(
         Historial(
             proveedor_id=p.id,
@@ -299,6 +300,7 @@ def _registrar(db, p: Proveedor, usuario: Usuario, tipo: str, campo: str, anteri
             valor_anterior=anterior,
             valor_nuevo=nuevo,
             sensible=sensible,
+            empresa_id=empresa_id,
             usuario_id=usuario.id,
             usuario_nombre=f"{usuario.nombre} ({usuario.usuario})",
             fecha=config.ahora(),
@@ -497,11 +499,13 @@ def condicion_historial_visible(usuario: Usuario):
     """Condición SQL para que un creador no vea en el historial el crédito de otras empresas; None si ve todo."""
     if usuario.rol != CREADOR:
         return None
-    otros_creditos = Historial.campo.like(f"{PREFIJO_CREDITO}%")
+    # Se permite por id de empresa, no por el nombre del campo (una empresa puede renombrarse y otra tomar su
+    # nombre). Un registro de crédito sin empresa queda oculto: el filtro se cierra por defecto.
+    es_credito = or_(Historial.empresa_id.is_not(None), Historial.campo.like(f"{PREFIJO_CREDITO}%"))
     propia = empresa_de(usuario)
     if propia is None:
-        return ~otros_creditos
-    return or_(~otros_creditos, Historial.campo == f"{PREFIJO_CREDITO}{propia.nombre}")
+        return ~es_credito
+    return or_(~es_credito, Historial.empresa_id == propia.id)
 
 
 def puede_editar_credito(usuario: Usuario, empresa_id: int) -> bool:
@@ -539,7 +543,8 @@ def aplicar_credito(db, p: Proveedor, empresa: Empresa, tipo: Optional[str], val
         p.creditos.append(ProveedorCredito(empresa_id=empresa.id, credito_tipo=tipo, credito_valor=valor))
     else:
         fila.credito_tipo, fila.credito_valor = tipo, valor
-    _registrar(db, p, usuario, "cambio", f"{PREFIJO_CREDITO}{empresa.nombre}", anterior, nuevo, sensible=False)
+    _registrar(db, p, usuario, "cambio", f"{PREFIJO_CREDITO}{empresa.nombre}", anterior, nuevo, sensible=False,
+               empresa_id=empresa.id)
     db.flush()
     return True
 

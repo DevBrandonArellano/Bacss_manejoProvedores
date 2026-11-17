@@ -222,6 +222,8 @@ class Historial(Base):
     valor_anterior: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     valor_nuevo: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sensible: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Solo en los cambios de crédito: la empresa dueña del registro (el nombre en `campo` puede cambiar).
+    empresa_id: Mapped[Optional[int]] = mapped_column(ForeignKey("empresas.id"), nullable=True, index=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
     usuario_nombre: Mapped[str] = mapped_column(String(120))
     fecha: Mapped[datetime] = mapped_column(DateTime, index=True)

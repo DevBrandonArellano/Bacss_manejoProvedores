@@ -91,6 +91,34 @@ def test_el_creador_solo_ve_su_empresa_en_la_ficha(equipo, ids_catalogo):
     assert "EMPRESA B" in equipo["aprobador"].get("/historial").text
 
 
+def test_el_historial_de_credito_sigue_a_la_empresa_y_no_a_su_nombre(equipo, ids_catalogo):
+    a, b = _empresa_id("EMPRESA A"), _empresa_id("EMPRESA B")
+    pid = _crear_proveedor(equipo["creador"], ids_catalogo, credito="dias", credito_dias="15")
+    publicar(equipo["admin"], f"/proveedores/{pid}/credito", {"empresa_id": str(b), "credito": "dias", "credito_dias": "77"})
+    # B cambia de nombre y A pasa a llamarse como se llamaba B.
+    assert publicar(equipo["admin"], f"/empresas/{b}", {"nombre": "EMPRESA Z", "activo": "1"}).status_code == 303
+    assert publicar(equipo["admin"], f"/empresas/{a}", {"nombre": "EMPRESA B", "activo": "1"}).status_code == 303
+    for ruta in (f"/proveedores/{pid}", "/historial"):
+        texto = equipo["creador"].get(ruta).text
+        assert "77 días" not in texto, ruta  # el crédito de la otra empresa sigue oculto
+    assert "15 días" in equipo["creador"].get("/historial").text  # y el suyo sigue visible
+
+
+def test_un_credito_sin_empresa_en_el_historial_queda_oculto_al_creador(equipo, ids_catalogo):
+    from app import config
+    from app.modelos import Historial, Usuario
+    pid = _crear_proveedor(equipo["creador"], ids_catalogo, credito="dias", credito_dias="15")
+    with db.SessionLocal() as s:  # registro de crédito al que le falta la empresa
+        admin = s.scalars(select(Usuario).where(Usuario.rol == "administrador")).first()
+        s.add(Historial(proveedor_id=pid, tipo="cambio", campo="Crédito · EMPRESA B", valor_anterior="(vacío)",
+                        valor_nuevo="77 días", sensible=False, empresa_id=None, usuario_id=admin.id,
+                        usuario_nombre="Admin (admin)", fecha=config.ahora()))
+        s.commit()
+    for ruta in (f"/proveedores/{pid}", "/historial"):
+        assert "77 días" not in equipo["creador"].get(ruta).text, ruta
+    assert "77 días" in equipo["aprobador"].get("/historial").text
+
+
 def test_editar_no_toca_el_credito(equipo, ids_catalogo):
     pid = _crear_proveedor(equipo["creador"], ids_catalogo, credito="dias", credito_dias="15")
     r = publicar(equipo["creador"], f"/proveedores/{pid}/editar",
