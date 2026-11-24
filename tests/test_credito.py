@@ -23,6 +23,7 @@ from app.credito import DIA_FIJO, DIAS, FIN_MES, calcular_vencimiento, interpret
         ("FIN DE MES", (FIN_MES, None)),
         ("fin de mes ", (FIN_MES, None)),
         ("29 DE CADA MES", (DIA_FIJO, 29)),
+        ("FDM", (FIN_MES, None)),
         ("", (None, None)),
         (None, (None, None)),
         ("A CONVENIR", (None, None)),

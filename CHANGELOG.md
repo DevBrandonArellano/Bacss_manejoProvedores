@@ -31,12 +31,21 @@
 - **Despliegue**: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`, `requirements.txt`, `requirements-dev.txt`, `pytest.ini`.
 - **`.gitignore`**: excluye `datos/`, la base de datos, respaldos, `.env`, archivos Excel y el entorno virtual.
 
+### Sesión 12 · 2026-11-24 · Créditos antiguos a Hiltexpoy e importación de las demás empresas
+
+- **`migrar-creditos`** (comando nuevo): pasa el crédito de las columnas antiguas a una empresa. Aplicado en la base real: 135 créditos a **Hiltexpoy** (dato indicado por el usuario: lo cargado era de esa empresa).
+- **Importador**: acepta los encabezados de los Excel de las otras empresas (`Tipo de Identificación`, `Identificación`, `Nombre Beneficiario`, `Banco`, `Tipo de Cuenta`, `Cuenta`, `Correo Electrónico`), «Cuenta Corriente/Ahorros» y bancos abreviados («B. DEL PICHINCHA»). «FDM» se lee como fin de mes.
+- **Proveedor ya registrado**: con `--empresa`, el importador le añade el crédito de esa empresa si no lo tenía (antes lo ignoraba por completo). Sus datos no se tocan.
+- **Carga real** (cada paso con su respaldo): Hiltexpoy (`DATOS BANCARIOS PROVEEDORES.xlsx`, hoja HILTEXPOY): 9 nuevos y 10 créditos, 2 filas sin número de ID omitidas. Interfibra: 52 nuevos, sin créditos (el libro no trae esa columna), 2 omitidas. Jaltextiles: 45 nuevos y 101 créditos, 1 con crédito no reconocido (fila 113). Resultado: 252 proveedores (59 revisados, 193 pendientes); créditos: Hiltexpoy 145, Jaltextiles 101.
+- **Pendiente del usuario**: revisar las filas omitidas (ID vacío, mismo ID con otra cuenta, tipo de cuenta «Pro Pyme» no existente) y asignar crédito a Interfibra y Ribel (la hoja RIBEL no trae crédito importado a ninguna empresa). El Excel de Hiltexpoy de `Descargas/PROVEEDORES` no incluye la hoja RIBEL.
+- Pruebas: +3 y 1 caso nuevo (248 en total, todas pasan; se corren en `.venv` local).
+
 ### Sesión 11 · 2026-11-24 · Migración de columnas y encabezados de crédito más cortos
 
 - **Migración automática de columnas** (`app/db.py`, `_agregar_columnas_faltantes`): tras `create_all`, agrega con `ALTER TABLE` las columnas `usuarios.empresa_id` e `historial.empresa_id` (con el índice `ix_historial_empresa_id`) si una base anterior no las tiene. Es repetible y no pierde datos. Los usuarios existentes quedan con `empresa_id` vacío: a cada creador hay que asignarle su empresa.
-- **Sigue pendiente**: trasladar los créditos antiguos (`proveedores.credito_tipo/credito_valor`) a `proveedor_creditos`; los registros viejos del historial quedan sin empresa.
+- **Sigue pendiente**: los registros viejos del historial (205, todos de alta o de revisión) quedan sin empresa.
 - **Encabezados de crédito** en el listado de proveedores: «Créd. XXX» (3 primeras letras de la empresa) con el nombre completo en el `title`, para ahorrar ancho.
-- Prueba nueva `tests/test_migracion.py` (base antigua → columnas añadidas, usuario conservado, segundo arranque sin error). **No se ejecutó** en esta sesión: faltan las dependencias (`argon2`) en el entorno.
+- Prueba nueva `tests/test_migracion.py` (base antigua → columnas añadidas, usuario conservado, segundo arranque sin error). Se ejecuta desde la sesión 12.
 
 ### Sesión 10 · 2026-11-17 · Empresas, crédito por empresa y «Revisión»
 
@@ -150,5 +159,4 @@ Hecho a partir de una revisión de las pantallas; sin dependencias nuevas ni int
 ### Notas
 
 - El Excel `datos/proveedores.xlsx` es confidencial: no se sube a ningún servicio ni a git, y no se copiaron datos de proveedores a ningún archivo del proyecto.
-- La carpeta no es un repositorio git todavía.
 - `PROMPT.md` es el encargo original; este changelog recoge los cambios de alcance posteriores, que tienen prioridad sobre él.

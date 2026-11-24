@@ -12,6 +12,7 @@ Reglas:
 - Lo que no se puede importar se omite y se explica por hoja y fila. El informe nunca incluye nombres,
   identificaciones ni cuentas: la fila se busca en el Excel.
 """
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -23,7 +24,26 @@ from .modelos import APROBADO, Banco, Empresa, Proveedor, TipoCuenta, TipoId, Us
 from .servicios import ErrorNegocio, limpiar, normalizar, partes_correo, sin_espacios
 
 OBLIGATORIAS = {"TIPO ID", "NUMERO ID", "TIPO CTA", "NUMERO CTA", "BANCOS"}
-SINONIMOS_CUENTA = {"CORRIENTE": "CTE", "AHORROS": "AHO", "AHORRO": "AHO"}
+# Otros nombres de encabezado que traen los Excel de cada empresa -> el nombre que usa el importador.
+ALIAS_ENCABEZADOS = {
+    "TIPO DE IDENTIFICACION": "TIPO ID",
+    "IDENTIFICACION": "NUMERO ID",
+    "TIPO DE CUENTA": "TIPO CTA",
+    "CUENTA": "NUMERO CTA",
+    "BANCO": "BANCOS",
+    "CORREO ELECTRONICO": "CORREO",
+}
+SINONIMOS_CUENTA = {
+    "CORRIENTE": "CTE", "AHORROS": "AHO", "AHORRO": "AHO",
+    "CUENTA CORRIENTE": "CTE", "CUENTA AHORROS": "AHO", "CUENTA DE AHORROS": "AHO",
+}
+# Palabras que no distinguen un banco de otro al comparar nombres abreviados («B. DEL PICHINCHA» ~ «BANCO PICHINCHA C.A.»).
+_PALABRAS_VACIAS = {"B", "BANCO", "DE", "DEL", "LA", "EL", "S", "A", "C", "SA", "CA", "BP", "P", "SUCURSAL"}
+
+
+def _clave_banco(texto) -> frozenset:
+    palabras = re.sub(r"[^A-Z0-9 ]", " ", normalizar(texto)).split()
+    return frozenset(w for w in palabras if w not in _PALABRAS_VACIAS)
 
 
 @dataclass
@@ -82,6 +102,7 @@ def _columnas(fila_encabezados) -> Optional[Dict[str, int]]:
     posiciones = {}
     for i, valor in enumerate(fila_encabezados):
         nombre = _encabezado(valor)
+        nombre = ALIAS_ENCABEZADOS.get(nombre, nombre)
         if nombre and nombre not in posiciones:
             posiciones[nombre] = i
     if not OBLIGATORIAS <= set(posiciones):
@@ -92,7 +113,8 @@ def _columnas(fila_encabezados) -> Optional[Dict[str, int]]:
         "cta_tipo": posiciones["TIPO CTA"],
         "cta_numero": posiciones["NUMERO CTA"],
         "banco": posiciones["BANCOS"],
-        "nombre": 0,
+        # El nombre es la primera columna, salvo que haya una «Nombre Beneficiario».
+        "nombre": posiciones.get("NOMBRE BENEFICIARIO", 0),
     }
     for clave, nombre in (("credito", "DIAS CREDITO"), ("registrado", "REGISTRADO"), ("correo", "CORREO")):
         if nombre in posiciones:
@@ -146,6 +168,21 @@ class _Catalogos:
         for b in db.scalars(select(Banco).where(Banco.activo.is_(True))).all():
             self.bancos_por_nombre.setdefault(b.nombre_norm, []).append(b)
             self.bancos_por_codigo.setdefault(b.codigo, []).append(b)
+        self.bancos_activos = list(db.scalars(select(Banco).where(Banco.activo.is_(True))).all())
+
+    def _por_nombre_abreviado(self, nombre: str) -> Optional[Banco]:
+        """Banco cuyo nombre coincide, sin las palabras vacías, con uno solo del catálogo (si hay duda, ninguno)."""
+        clave = _clave_banco(nombre)
+        if not clave:
+            return None
+        iguales = [b for b in self.bancos_activos if _clave_banco(b.nombre) == clave]
+        if len(iguales) == 1:
+            return iguales[0]
+        if not iguales:
+            contenidos = [b for b in self.bancos_activos if clave <= _clave_banco(b.nombre)]
+            if len(contenidos) == 1:
+                return contenidos[0]
+        return None
 
     def banco(self, nombre: Optional[str], codigo: Optional[str]) -> Optional[Banco]:
         if nombre:
@@ -156,6 +193,10 @@ class _Catalogos:
                 con_codigo = [b for b in coincidencias if b.codigo == codigo]
                 if len(con_codigo) == 1:
                     return con_codigo[0]
+            if not coincidencias:
+                abreviado = self._por_nombre_abreviado(nombre)
+                if abreviado is not None:
+                    return abreviado
         if codigo:
             por_codigo = self.bancos_por_codigo.get(codigo, [])
             if len(por_codigo) == 1:
@@ -299,6 +340,12 @@ def importar(db, ruta, usuario: Usuario, empresa: Optional[Empresa] = None) -> R
             clave_prov = (tipo_id.id, numero_id)
             if clave_prov in existentes:
                 resumen.ya_existian += 1
+                # Un proveedor de otra empresa: sus datos no se tocan, pero se le añade el crédito de esta empresa.
+                if empresa is not None and tipo_cred and not credito.validar(tipo_cred, valor_cred):
+                    p = servicios.proveedor_por_id(db, tipo_id.id, numero_id)
+                    if p is not None and p.credito_de(empresa.id) is None:
+                        if servicios.aplicar_credito(db, p, empresa, tipo_cred, valor_cred, usuario):
+                            resumen.creditos += 1
                 continue
             if clave_prov in vistos:
                 hoja0, fila0, firma0, creado = vistos[clave_prov]

@@ -31,7 +31,7 @@ def interpretar(texto) -> Tuple[Optional[str], Optional[int]]:
         return None, None
     if "CONTADO" in t:
         return DIAS, 0
-    if "FIN DE MES" in t or "FIN MES" in t:
+    if "FIN DE MES" in t or "FIN MES" in t or t == "FDM":
         return FIN_MES, None
     m = re.fullmatch(r"(?:EL |DIA |LOS )?(\d{1,2}) DE CADA MES", t) or re.fullmatch(r"CADA (\d{1,2})", t)
     if m:

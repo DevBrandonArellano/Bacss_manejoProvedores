@@ -4,8 +4,8 @@ import pytest
 from sqlalchemy import select
 
 import ayudas
-from app import cli, db, importacion
-from app.modelos import APROBADO, PENDIENTE, Banco, Historial, Proveedor, ProveedorCredito
+from app import cli, db, importacion, servicios
+from app.modelos import APROBADO, PENDIENTE, Banco, Historial, Proveedor, ProveedorCredito, Usuario
 from app.servicios import ErrorNegocio
 
 ENCABEZADOS = [None, "DÍAS CREDITO ", "REGISTRADO", "TIPO ID", "NUMERO ID", None, "TIPO CTA", "NUMERO CTA", " BANCOS", None, "CORREO", None, None]
@@ -290,5 +290,92 @@ def test_el_cli_importa_el_credito_de_la_empresa_indicada(entorno, tmp_path, cap
         with db.SessionLocal() as s:
             (fila_credito,) = s.scalars(select(ProveedorCredito)).all()
             assert (fila_credito.empresa.nombre, fila_credito.credito_tipo, fila_credito.credito_valor) == ("Cia Norte", "dias", 30)
+    finally:
+        db.cerrar_bd()
+
+
+# ---------------------------------------------------------------- Excel de otras empresas (otros encabezados)
+
+ENCABEZADOS_EMPRESA = [
+    "Tipo de Identificación", "Identificación", "Nombre Beneficiario", "DIAS CRÉDITO", "Banco",
+    "Tipo de Cuenta", "Cuenta", "Correo Electrónico", "Referencia",
+]
+
+
+def libro_empresa(tmp_path, filas):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "OTRA"
+    ws.append(ENCABEZADOS_EMPRESA)
+    for f in filas:
+        ws.append(f)
+    ruta = tmp_path / "otra.xlsx"
+    wb.save(ruta)
+    return ruta
+
+
+def test_importa_el_formato_de_otras_empresas(base, tmp_path):
+    sesion, actor = base
+    empresa = ayudas.empresa(sesion, "Otra SA")
+    ruta = libro_empresa(tmp_path, [
+        ["RUC", "0990000000001", "PROVEEDOR UNO SA", "30", "B. DEL PICHINCHA", "Cuenta Corriente", "111", "a@b.com", "PAGO"],
+        ["CEDULA", "1714307103", "PERSONA DOS", "FDM", "B. PRODUBANCO", "Cuenta Ahorros", "222", None, None],
+    ])
+    resumen = importacion.importar(sesion, ruta, actor, empresa)
+    sesion.commit()
+    uno, dos = _todos(sesion)
+    assert (uno.nombre, uno.tipo_cuenta.codigo, uno.banco.nombre) == ("PROVEEDOR UNO SA", "CTE", "BANCO PICHINCHA C.A.")
+    assert (dos.tipo_cuenta.codigo, dos.banco.nombre) == ("AHO", "PRODUBANCO / PROMERICA")
+    assert _credito(uno, empresa) == ("dias", 30) and _credito(dos, empresa) == ("fin_mes", None)
+    assert resumen.importados == 2 and resumen.creditos == 2 and not resumen.avisos
+
+
+def test_un_proveedor_ya_registrado_recibe_el_credito_de_la_nueva_empresa(base, tmp_path):
+    sesion, actor = base
+    norte, sur = ayudas.empresa(sesion, "Norte"), ayudas.empresa(sesion, "Sur")
+    fila_uno = ["RUC", "0990000000001", "PROVEEDOR UNO SA", "30", "B. DEL PICHINCHA", "Cuenta Corriente", "111", None, None]
+    importacion.importar(sesion, libro_empresa(tmp_path, [fila_uno]), actor, norte)
+    sesion.commit()
+    fila_sur = list(fila_uno)
+    fila_sur[2], fila_sur[3], fila_sur[6] = "OTRO NOMBRE", "15", "999"  # sus datos no se pisan
+    resumen = importacion.importar(sesion, libro_empresa(tmp_path, [fila_sur]), actor, sur)
+    sesion.commit()
+    (p,) = _todos(sesion)
+    assert (p.nombre, p.numero_cuenta) == ("PROVEEDOR UNO SA", "111")
+    assert _credito(p, norte) == ("dias", 30) and _credito(p, sur) == ("dias", 15)
+    assert (resumen.importados, resumen.ya_existian, resumen.creditos) == (0, 1, 1)
+    # repetirlo no cambia nada, y el crédito ya guardado de una empresa no se pisa
+    fila_sur[3] = "60"
+    assert importacion.importar(sesion, libro_empresa(tmp_path, [fila_sur]), actor, sur).creditos == 0
+    assert _credito(p, sur) == ("dias", 15)
+
+
+def test_el_cli_pasa_el_credito_antiguo_a_una_empresa(entorno, capsys):
+    try:
+        db.iniciar_bd(entorno.ruta_bd)
+        with db.SessionLocal() as s:
+            from app import catalogos
+            catalogos.preparar_bd(s)
+            ayudas.empresa(s, "Cia Norte")
+            for n, (tipo, valor) in enumerate([("dias", 30), ("fin_mes", None), (None, None)]):
+                p = servicios.crear_proveedor(
+                    s, ayudas.datos_proveedor(s, nombre=f"P{n}", numero_id=f"099000000000{n}", numero_cuenta=f"00{n}"),
+                    s.scalars(select(Usuario).where(Usuario.usuario == "admin")).one())
+                p.credito_tipo, p.credito_valor = tipo, valor
+            s.commit()
+        args = ["migrar-creditos", "--empresa", "cia norte", "--usuario", "admin"]
+        assert cli.main(args) == 0  # simula
+        assert "pasados a Cia Norte: 2" in capsys.readouterr().out
+        with db.SessionLocal() as s:
+            assert s.scalars(select(ProveedorCredito)).all() == []
+        assert cli.main(args + ["--aplicar"]) == 0
+        capsys.readouterr()
+        assert cli.main(args + ["--aplicar"]) == 0  # repetirlo no duplica
+        assert "pasados a Cia Norte: 0" in capsys.readouterr().out
+        with db.SessionLocal() as s:
+            filas = s.scalars(select(ProveedorCredito)).all()
+            assert sorted((f.credito_tipo, f.credito_valor) for f in filas) == [("dias", 30), ("fin_mes", None)]
+            assert s.scalars(select(Proveedor).where(Proveedor.credito_tipo.is_not(None))).all()  # columnas antiguas intactas
+        assert cli.main(["migrar-creditos", "--empresa", "NOEXISTE", "--usuario", "admin"]) == 1
     finally:
         db.cerrar_bd()

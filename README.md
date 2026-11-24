@@ -44,7 +44,7 @@ Cada proveedor existe **una sola vez**, pero cada empresa le maneja su propio cr
 4. **Proveedor ya registrado**: si un creador registra un proveedor con un tipo y número de ID que ya existe, la app no crea otro ni cambia sus datos: solo añade el crédito de la empresa del creador y lo lleva a la ficha. El formulario lo avisa mientras se escribe.
 5. Los cambios de crédito quedan en el historial como «Crédito · NOMBRE DE LA EMPRESA».
 
-> **Bases anteriores:** al arrancar, la app agrega sola las columnas nuevas (`usuarios.empresa_id` e `historial.empresa_id`) a una base creada con una versión anterior, sin perder datos. Después hay que asignar la empresa a cada creador (Administración → Usuarios). Los créditos antiguos (`proveedores.credito_tipo/credito_valor`) **no** se copian a «Crédito por empresa»: se conservan en sus columnas, pero no se muestran.
+> **Bases anteriores:** al arrancar, la app agrega sola las columnas nuevas (`usuarios.empresa_id` e `historial.empresa_id`) a una base creada con una versión anterior, sin perder datos. Después hay que asignar la empresa a cada creador (Administración → Usuarios). Los créditos antiguos (`proveedores.credito_tipo/credito_valor`) se pasan a una empresa con `migrar-creditos` (ver abajo); las columnas antiguas se conservan.
 
 ## Facturas (apagadas por ahora)
 
@@ -73,7 +73,7 @@ El panel inicial muestra facturas vencidas, que vencen hoy y las de los próximo
 
 ## Importar proveedores desde un Excel
 
-Carga los proveedores de un libro con hojas que tengan las columnas `TIPO ID`, `NUMERO ID`, `TIPO CTA`, `NUMERO CTA` y `BANCOS` (el nombre va en la primera columna). Las demás hojas se ignoran. Copie el archivo a la carpeta `datos/` (no se sube a git) y ejecute:
+Carga los proveedores de un libro con hojas que tengan las columnas `TIPO ID`, `NUMERO ID`, `TIPO CTA`, `NUMERO CTA` y `BANCOS` (el nombre va en la primera columna). También se aceptan los encabezados de los libros de otras empresas: `Tipo de Identificación`, `Identificación`, `Nombre Beneficiario`, `Tipo de Cuenta`, `Cuenta`, `Banco` y `Correo Electrónico`; los bancos abreviados («B. DEL PICHINCHA») se reconocen si coinciden con uno solo del catálogo. Las demás hojas se ignoran. Copie el archivo a la carpeta `datos/` (no se sube a git) y ejecute:
 
 ```
 docker compose run --rm --no-deps app python -m app.cli importar-proveedores /app/datos/ARCHIVO.xlsx --usuario admin
@@ -82,10 +82,21 @@ docker compose run --rm --no-deps app python -m app.cli importar-proveedores /ap
 
 - Sin `--aplicar` solo **simula** y muestra el resumen. Con `--aplicar` hace antes un respaldo y guarda todo en una sola transacción.
 - `--empresa` indica a qué empresa pertenece la columna de crédito del Excel (sin distinguir mayúsculas ni tildes; la empresa debe existir y estar activa). Sin `--empresa` los proveedores se importan igual, pero **sin crédito**, y el resumen lo indica.
-- Cada proveedor se identifica por tipo + número de ID. Si ya existe se deja como está (también su crédito), así que se puede volver a correr sin duplicar ni pisar cambios hechos a mano.
+- Cada proveedor se identifica por tipo + número de ID. Si ya existe se dejan como están sus datos; con `--empresa` solo se le añade el crédito de esa empresa si aún no tenía (nunca se cambia uno existente). Se puede volver a correr sin duplicar ni pisar cambios hechos a mano.
 - Los marcados `OK` en la columna `REGISTRADO` entran **revisados** (queda anotado en su historial); el resto queda **pendiente** de revisión.
 - Lo que no se puede importar (ID vacío o con largo incorrecto, otra cuenta para el mismo ID, etc.) se omite y se lista por hoja y fila, sin mostrar datos personales. Un proveedor con dos cuentas distintas en el Excel entra con la de la primera fila; la otra debe revisarse a mano.
 - Un banco, un correo o un crédito que no se reconocen no impiden la importación: el proveedor entra sin ese dato y se avisa (el correo inválido queda en las notas). La pantalla «Validaciones» los muestra.
+
+### Pasar el crédito antiguo a una empresa
+
+Los créditos importados antes de que existieran las empresas están en columnas antiguas. Para pasarlos a la empresa a la que pertenecen:
+
+```
+docker compose run --rm --no-deps app python -m app.cli migrar-creditos --empresa "NOMBRE" --usuario admin
+docker compose run --rm --no-deps app python -m app.cli migrar-creditos --empresa "NOMBRE" --usuario admin --aplicar
+```
+
+Sin `--aplicar` solo simula. Con `--aplicar` hace un respaldo, no toca los créditos que la empresa ya tenga y deja las columnas antiguas intactas.
 
 ## Comandos de mantenimiento
 
