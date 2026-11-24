@@ -1,7 +1,7 @@
 """Conexión a SQLite."""
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -33,6 +33,27 @@ def iniciar_bd(ruta) -> None:
     from . import modelos  # noqa: F401  (registra las tablas)
 
     Base.metadata.create_all(engine)
+    _agregar_columnas_faltantes()
+
+
+# Columnas añadidas después de la primera versión: create_all no las agrega a tablas que ya existen.
+COLUMNAS_NUEVAS = (
+    ("usuarios", "empresa_id", "INTEGER REFERENCES empresas(id)"),
+    ("historial", "empresa_id", "INTEGER REFERENCES empresas(id)"),
+)
+
+
+def _agregar_columnas_faltantes() -> None:
+    """Actualiza bases creadas con versiones anteriores sin perder datos."""
+    inspector = inspect(engine)
+    with engine.begin() as conexion:
+        for tabla, columna, definicion in COLUMNAS_NUEVAS:
+            if tabla not in inspector.get_table_names():
+                continue
+            if columna not in {c["name"] for c in inspector.get_columns(tabla)}:
+                conexion.execute(text(f"ALTER TABLE {tabla} ADD COLUMN {columna} {definicion}"))
+                if tabla == "historial":
+                    conexion.execute(text("CREATE INDEX IF NOT EXISTS ix_historial_empresa_id ON historial(empresa_id)"))
 
 
 def cerrar_bd() -> None:

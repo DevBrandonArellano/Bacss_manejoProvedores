@@ -19,7 +19,7 @@
   <table>
     <thead>
       <tr>
-        {{ cab("nombre", "Nombre") }}{{ cab("identificacion", "Identificación") }}{{ cab("banco", "Banco") }}<th>Cuenta</th>{% for e in empresas_cols %}<th>Crédito {{ e.nombre }}</th>{% endfor %}
+        {{ cab("nombre", "Nombre") }}{{ cab("identificacion", "Identificación") }}{{ cab("banco", "Banco") }}<th>Cuenta</th>{% for e in empresas_cols %}<th title="Crédito {{ e.nombre }}">Créd. {{ e.nombre[:3] }}</th>{% endfor %}
         <th>Registrado en banco</th>{{ cab("aprobacion", "Revisión") }}
       </tr>
     </thead>

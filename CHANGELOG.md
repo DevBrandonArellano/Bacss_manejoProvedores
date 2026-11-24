@@ -31,6 +31,13 @@
 - **Despliegue**: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`, `requirements.txt`, `requirements-dev.txt`, `pytest.ini`.
 - **`.gitignore`**: excluye `datos/`, la base de datos, respaldos, `.env`, archivos Excel y el entorno virtual.
 
+### Sesión 11 · 2026-11-24 · Migración de columnas y encabezados de crédito más cortos
+
+- **Migración automática de columnas** (`app/db.py`, `_agregar_columnas_faltantes`): tras `create_all`, agrega con `ALTER TABLE` las columnas `usuarios.empresa_id` e `historial.empresa_id` (con el índice `ix_historial_empresa_id`) si una base anterior no las tiene. Es repetible y no pierde datos. Los usuarios existentes quedan con `empresa_id` vacío: a cada creador hay que asignarle su empresa.
+- **Sigue pendiente**: trasladar los créditos antiguos (`proveedores.credito_tipo/credito_valor`) a `proveedor_creditos`; los registros viejos del historial quedan sin empresa.
+- **Encabezados de crédito** en el listado de proveedores: «Créd. XXX» (3 primeras letras de la empresa) con el nombre completo en el `title`, para ahorrar ancho.
+- Prueba nueva `tests/test_migracion.py` (base antigua → columnas añadidas, usuario conservado, segundo arranque sin error). **No se ejecutó** en esta sesión: faltan las dependencias (`argon2`) en el entorno.
+
 ### Sesión 10 · 2026-11-17 · Empresas, crédito por empresa y «Revisión»
 
 Plan: `docs/superpowers/plans/2026-11-17-empresas-credito-revision.md` (spec en `docs/superpowers/specs/`). Rama `feat/empresas-credito-revision`, sin commit.
@@ -47,7 +54,7 @@ Plan: `docs/superpowers/plans/2026-11-17-empresas-credito-revision.md` (spec en 
 - **Importación**: nueva opción `--empresa NOMBRE`; el crédito del Excel se guarda para esa empresa. Sin `--empresa` se importan los proveedores sin crédito y el resumen lo dice; una empresa inexistente da error.
 - Pruebas: +29 en 5 archivos nuevos (`test_revision_textos`, `test_empresas`, `test_credito_empresas`, `test_proveedor_empresas`, `test_vistas_revisor`) y 3 en `test_importacion`; aserciones antiguas ajustadas a los textos y al crédito por empresa. Las pruebas corren en un `.venv` local con `requirements-dev.txt`.
 - **Pendiente — facturación por empresa**: la facturación (apagada) sigue calculando vencimientos con las columnas antiguas `proveedores.credito_tipo/credito_valor`, que ninguna pantalla escribe ya. Se retoma cuando se reactive la facturación.
-- **Pendiente — migración de datos**: **no hay migración**. Esta versión necesita una base nueva; **no arrancarla contra la base anterior** (le falta `usuarios.empresa_id`). Las columnas antiguas de crédito se conservan para no perder los créditos ya importados cuando se defina la migración.
+- **Migración de datos**: ver sesión 11 (solo cubre las columnas nuevas; los créditos antiguos no se trasladan).
 
 ### Sesión 9 · 2026-11-16 · Los aprobados salen de «Validaciones»
 

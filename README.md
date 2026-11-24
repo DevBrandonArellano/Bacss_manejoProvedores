@@ -44,7 +44,7 @@ Cada proveedor existe **una sola vez**, pero cada empresa le maneja su propio cr
 4. **Proveedor ya registrado**: si un creador registra un proveedor con un tipo y número de ID que ya existe, la app no crea otro ni cambia sus datos: solo añade el crédito de la empresa del creador y lo lleva a la ficha. El formulario lo avisa mientras se escribe.
 5. Los cambios de crédito quedan en el historial como «Crédito · NOMBRE DE LA EMPRESA».
 
-> **Sin migración todavía:** esta versión necesita una base nueva. No la arranque contra una base creada con una versión anterior (le falta la empresa de los usuarios); la migración de los datos actuales se definirá aparte.
+> **Bases anteriores:** al arrancar, la app agrega sola las columnas nuevas (`usuarios.empresa_id` e `historial.empresa_id`) a una base creada con una versión anterior, sin perder datos. Después hay que asignar la empresa a cada creador (Administración → Usuarios). Los créditos antiguos (`proveedores.credito_tipo/credito_valor`) **no** se copian a «Crédito por empresa»: se conservan en sus columnas, pero no se muestran.
 
 ## Facturas (apagadas por ahora)
 
