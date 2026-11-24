@@ -96,7 +96,7 @@ docker compose run --rm --no-deps app python -m app.cli migrar-creditos --empres
 docker compose run --rm --no-deps app python -m app.cli migrar-creditos --empresa "NOMBRE" --usuario admin --aplicar
 ```
 
-Sin `--aplicar` solo simula. Con `--aplicar` hace un respaldo, no toca los créditos que la empresa ya tenga y deja las columnas antiguas intactas.
+Sin `--aplicar` solo simula. Con `--aplicar` hace un respaldo, no toca los créditos que la empresa ya tenga y deja las columnas antiguas intactas. Úsalo solo si todos los créditos antiguos son de una misma empresa; si vienen de un libro con varias hojas (una por empresa), vuelve a importar cada hoja con `--empresa` o corrige el crédito de cada empresa contra su Excel.
 
 ## Comandos de mantenimiento
 
