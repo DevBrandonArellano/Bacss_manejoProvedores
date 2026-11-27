@@ -5,7 +5,7 @@ from datetime import date
 from sqlalchemy import select
 
 from app import servicios
-from app.modelos import Banco, TipoCuenta, TipoId
+from app.modelos import CREADOR, Banco, Empresa, TipoCuenta, TipoId
 
 CLAVE_ADMIN = "clave-admin-123"
 
@@ -50,8 +50,21 @@ def datos_proveedor(sesion, **cambios) -> dict:
     return datos
 
 
-def crear_usuario(sesion, usuario: str, rol: str):
-    u = servicios.crear_usuario(sesion, usuario, usuario.capitalize(), clave_de(usuario), rol)
+def empresa(sesion, nombre: str = "EMPRESA A") -> Empresa:
+    """La empresa con ese nombre; si no existe, la crea."""
+    e = sesion.scalars(select(Empresa).where(Empresa.nombre_norm == servicios.normalizar(nombre))).first()
+    if e is None:
+        e = servicios.crear_empresa(sesion, nombre)
+        sesion.commit()
+    return e
+
+
+def crear_usuario(sesion, usuario: str, rol: str, empresa_usuario=None):
+    """Un creador sin empresa indicada recibe la empresa por defecto («EMPRESA A»)."""
+    if rol == CREADOR and empresa_usuario is None:
+        empresa_usuario = empresa(sesion)
+    empresa_id = empresa_usuario.id if empresa_usuario is not None else None
+    u = servicios.crear_usuario(sesion, usuario, usuario.capitalize(), clave_de(usuario), rol, empresa_id)
     sesion.commit()
     return u
 
@@ -61,6 +74,12 @@ def proveedor_aprobado(sesion, creador, aprobador, **cambios):
     servicios.aprobar(sesion, p, aprobador)
     sesion.commit()
     return p
+
+
+def con_credito(sesion, p, empresa_credito, usuario, tipo="dias", valor=30) -> None:
+    """Deja a `p` con ese crédito para la empresa (sin revisar permisos)."""
+    servicios.aplicar_credito(sesion, p, empresa_credito, tipo, valor, usuario)
+    sesion.commit()
 
 
 def factura(sesion, p, usuario, numero="001-001-000000123", fecha=date(2026, 3, 10), valor="1250.50"):

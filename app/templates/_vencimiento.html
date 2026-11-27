@@ -15,6 +15,6 @@
 <div class="ayuda-error">Este proveedor no tiene condición de crédito: se tratará como de contado. Puede definirla en su ficha.</div>
 {% endif %}
 {% if not p.aprobado %}
-<div class="ayuda">Aviso: el proveedor está {{ p.estado_texto|lower }}; la factura no saldrá en el pago masivo hasta que se apruebe.</div>
+<div class="ayuda">Aviso: el proveedor está {{ p.estado_texto|lower }}; la factura no saldrá en el pago masivo hasta que se revise.</div>
 {% endif %}
 {% endif %}

@@ -4,13 +4,13 @@
 <div class="cabecera">
   <h1>Validaciones <span class="suave">({{ total }} aviso{{ "s" if total != 1 }})</span></h1>
 </div>
-<p class="suave">Proveedores activos <strong>pendientes de aprobación</strong> con datos incompletos o sospechosos. Al aprobarse, un proveedor sale de esta lista; si después se cambia un dato sensible vuelve a quedar pendiente y sus avisos reaparecen. Se recalcula cada vez que abre esta pantalla.</p>
+<p class="suave">Proveedores activos <strong>pendientes de revisión</strong> con datos incompletos o sospechosos. Al marcarse como revisado, un proveedor sale de esta lista; si después se cambia un dato sensible vuelve a quedar pendiente y sus avisos reaparecen. Se recalcula cada vez que abre esta pantalla.</p>
 
 {% for g in grupos %}
 <h2>{{ g.titulo }} <span class="insignia insignia-{{ g.severidad }}">prioridad {{ g.severidad }}</span> <span class="suave">({{ g.casos|length }})</span></h2>
 <div class="tabla-envoltura">
   <table>
-    <thead><tr><th>Proveedor</th><th>Detalle</th><th>Aprobación</th></tr></thead>
+    <thead><tr><th>Proveedor</th><th>Detalle</th><th>Revisión</th></tr></thead>
     <tbody>
       {% for c in g.casos %}
       <tr>
@@ -23,6 +23,6 @@
   </table>
 </div>
 {% else %}
-<div class="tarjeta"><p style="margin:0">No hay avisos: los proveedores pendientes de aprobación tienen sus datos completos y sin duplicados.</p></div>
+<div class="tarjeta"><p style="margin:0">No hay avisos: los proveedores pendientes de revisión tienen sus datos completos y sin duplicados.</p></div>
 {% endfor %}
 {% endblock %}

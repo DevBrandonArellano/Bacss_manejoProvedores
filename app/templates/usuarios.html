@@ -6,16 +6,16 @@
 <div class="tarjeta">
   <h2>Perfiles</h2>
   <ul style="margin:0; padding-left:1.2rem">
-    <li><strong>Creador:</strong> registra y edita proveedores{% if facturacion %}, registra facturas, las marca como pagadas y genera el archivo de pago{% endif %}.</li>
-    <li><strong>Aprobador:</strong> consulta todo y aprueba o rechaza proveedores. No puede modificarlos.</li>
-    <li><strong>Administrador:</strong> todo lo anterior, más usuarios, catálogos y configuración.</li>
+    <li><strong>Creador:</strong> trabaja para una empresa: registra y edita proveedores y el crédito que su empresa tiene con ellos{% if facturacion %}, registra facturas, las marca como pagadas y genera el archivo de pago{% endif %}.</li>
+    <li><strong>Revisor:</strong> consulta todo, ve el crédito de todas las empresas y marca como revisados o rechaza proveedores. No puede modificarlos.</li>
+    <li><strong>Administrador:</strong> todo lo anterior (puede cambiar el crédito de cualquier empresa), más empresas, usuarios, catálogos y configuración.</li>
   </ul>
-  <p class="suave" style="margin:.5rem 0 0">Nadie puede aprobar un proveedor que creó o modificó por última vez, tampoco el administrador.</p>
+  <p class="suave" style="margin:.5rem 0 0">Nadie puede revisar un proveedor que creó o modificó por última vez, tampoco el administrador.</p>
 </div>
 
 <div class="tabla-envoltura">
   <table>
-    <thead><tr><th>Usuario</th><th>Nombre</th><th>Perfil</th><th>Activo</th><th>Nueva contraseña</th><th></th></tr></thead>
+    <thead><tr><th>Usuario</th><th>Nombre</th><th>Perfil</th><th>Empresa</th><th>Activo</th><th>Nueva contraseña</th><th></th></tr></thead>
     <tbody>
       {% for x in lista %}
       <tr class="{{ 'inactivo' if not x.activo }}">
@@ -26,6 +26,17 @@
             {% for clave, texto in ROLES.items() %}
             <option value="{{ clave }}" {{ 'selected' if x.rol == clave }}>{{ texto }}</option>
             {% endfor %}
+          </select>
+        </td>
+        <td>
+          <select form="usuario-{{ x.id }}" name="empresa_id" aria-label="Empresa">
+            <option value="">(solo creadores)</option>
+            {% for e in empresas %}
+            <option value="{{ e.id }}" {{ 'selected' if x.empresa_id == e.id }}>{{ e.nombre }}</option>
+            {% endfor %}
+            {% if x.empresa and not x.empresa.activo %}
+            <option value="{{ x.empresa.id }}" selected>{{ x.empresa.nombre }} (desactivada)</option>
+            {% endif %}
           </select>
         </td>
         <td><input type="checkbox" form="usuario-{{ x.id }}" name="activo" value="1" {{ 'checked' if x.activo }} aria-label="Activo"></td>
@@ -60,9 +71,17 @@
         <label for="nuevo-rol">Perfil</label>
         <select id="nuevo-rol" name="rol" required>
           <option value="creador">Creador</option>
-          <option value="aprobador">Aprobador</option>
+          <option value="aprobador">Revisor</option>
           <option value="administrador">Administrador</option>
         </select>
+      </div>
+      <div>
+        <label for="nuevo-empresa">Empresa</label>
+        <select id="nuevo-empresa" name="empresa_id">
+          <option value="">(solo creadores)</option>
+          {% for e in empresas %}<option value="{{ e.id }}">{{ e.nombre }}</option>{% endfor %}
+        </select>
+        <div class="ayuda">Obligatoria para el perfil Creador.{% if not empresas %} Aún no hay empresas: <a href="/empresas">créelas aquí</a>.{% endif %}</div>
       </div>
       <div>
         <label for="nuevo-clave">Contraseña inicial</label>

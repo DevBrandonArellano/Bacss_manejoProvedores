@@ -31,6 +31,41 @@
 - **Despliegue**: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`, `requirements.txt`, `requirements-dev.txt`, `pytest.ini`.
 - **`.gitignore`**: excluye `datos/`, la base de datos, respaldos, `.env`, archivos Excel y el entorno virtual.
 
+### Sesión 12 · 2026-11-24 · Créditos antiguos a Hiltexpoy e importación de las demás empresas
+
+- **`migrar-creditos`** (comando nuevo): pasa el crédito de las columnas antiguas a una empresa. Aplicado en la base real: 135 créditos a **Hiltexpoy** (dato indicado por el usuario: lo cargado era de esa empresa).
+- **Importador**: acepta los encabezados de los Excel de las otras empresas (`Tipo de Identificación`, `Identificación`, `Nombre Beneficiario`, `Banco`, `Tipo de Cuenta`, `Cuenta`, `Correo Electrónico`), «Cuenta Corriente/Ahorros» y bancos abreviados («B. DEL PICHINCHA»). «FDM» se lee como fin de mes.
+- **Proveedor ya registrado**: con `--empresa`, el importador le añade el crédito de esa empresa si no lo tenía (antes lo ignoraba por completo). Sus datos no se tocan.
+- **Carga real** (cada paso con su respaldo): Hiltexpoy (`DATOS BANCARIOS PROVEEDORES.xlsx`, hoja HILTEXPOY): 9 nuevos y 10 créditos, 2 filas sin número de ID omitidas. Interfibra: 52 nuevos, sin créditos (el libro no trae esa columna), 2 omitidas. Jaltextiles: 45 nuevos y 101 créditos, 1 con crédito no reconocido (fila 113). Resultado: 252 proveedores (59 revisados, 193 pendientes); créditos: Hiltexpoy 145, Jaltextiles 101.
+- **Corrección posterior (mismo día)**: el usuario aclaró los archivos: `HILTEXPOY.xlsx` es el de Hiltexpoy y `PROVEEDORES RIBEL.xlsx` (el «archivo madre» de la primera carga, con las hojas RIBEL e HILTEXPOY) trae a Ribel. Los créditos antiguos, que mezclaban ambas hojas, se habían pasado todos a Hiltexpoy. Se igualó el crédito de cada empresa a su hoja: Hiltexpoy 124 iguales, 5 corregidos y 16 quitados (eran de proveedores solo de Ribel); Ribel 87 créditos nuevos. Todo con respaldo (`proveedores-20261124-145249.db`) y anotado en el historial. Estado final: 252 proveedores; créditos Hiltexpoy 129, Jaltextiles 101, Ribel 87.
+- **Pendiente del usuario**: revisar las filas omitidas (ID vacío, mismo ID con otra cuenta, tipo de cuenta «Pro Pyme» no existente), la fila de Ribel sin proveedor en la base y asignar crédito a Interfibra (su libro no trae esa columna).
+- Pruebas: +3 y 1 caso nuevo (248 en total, todas pasan; se corren en `.venv` local).
+
+### Sesión 11 · 2026-11-24 · Migración de columnas y encabezados de crédito más cortos
+
+- **Migración automática de columnas** (`app/db.py`, `_agregar_columnas_faltantes`): tras `create_all`, agrega con `ALTER TABLE` las columnas `usuarios.empresa_id` e `historial.empresa_id` (con el índice `ix_historial_empresa_id`) si una base anterior no las tiene. Es repetible y no pierde datos. Los usuarios existentes quedan con `empresa_id` vacío: a cada creador hay que asignarle su empresa.
+- **Sigue pendiente**: los registros viejos del historial (205, todos de alta o de revisión) quedan sin empresa.
+- **Encabezados de crédito** en el listado de proveedores: «Créd. XXX» (3 primeras letras de la empresa) con el nombre completo en el `title`, para ahorrar ancho.
+- Prueba nueva `tests/test_migracion.py` (base antigua → columnas añadidas, usuario conservado, segundo arranque sin error). Se ejecuta desde la sesión 12.
+
+### Sesión 10 · 2026-11-17 · Empresas, crédito por empresa y «Revisión»
+
+Plan: `docs/superpowers/plans/2026-11-17-empresas-credito-revision.md` (spec en `docs/superpowers/specs/`). Rama `feat/empresas-credito-revision`, sin commit.
+
+- **«Aprobación» → «Revisión» (solo lo visible)**: menú y pantalla «Revisiones», perfil «Revisor», estado «Revisado», botón «Marcar como revisado», mensajes, historial («Estado de revisión»), importador, CLI y la columna `ESTADO REVISION` de la exportación de proveedores. No cambian rutas (`/aprobaciones`), clases CSS, funciones ni valores guardados (`"aprobado"`). Una prueba recorre las pantallas y falla si aparece «aprob…» en el texto visible.
+- **Empresas**: tabla nueva `empresas`; pantalla Administración → Empresas (crear, renombrar, desactivar; el nombre no se repite sin importar mayúsculas ni tildes).
+- **Empresa por usuario**: `usuarios.empresa_id`. Obligatoria para el creador activo; solo el creador la guarda. Columna «Empresa» en Usuarios.
+- **Crédito por empresa**: tabla nueva `proveedor_creditos` (una fila por proveedor y empresa). El creador ve y cambia solo el de su empresa (comprobado en el servidor; un `empresa_id` manipulado se rechaza con 403 o se ignora); el revisor ve todos y no cambia ninguno; el administrador cambia cualquiera desde la ficha. El crédito **no** es dato sensible: cambiarlo no reabre la revisión. Queda en el historial como «Crédito · EMPRESA».
+- **Alta de un proveedor ya registrado** (mismo tipo y número de ID, también con espacios): no se crea otro ni se cambian sus datos; solo se añade el crédito de la empresa del creador y se abre su ficha, avisando si está desactivado. El formulario lo avisa mientras se escribe.
+- **El formulario de proveedor ya no lleva el crédito**, salvo el alta de un creador («Crédito con <su empresa>»). Editar un proveedor no toca el crédito. Ficha con la tarjeta «Crédito por empresa».
+- **Revisor**: listado con una columna de crédito por empresa activa; «Revisiones» muestra «EMPRESA: crédito» por cada una; la exportación de proveedores trae `CREDITO <EMPRESA>` después de `CORREO` y ya no `DIAS CREDITO`. Una empresa desactivada desaparece de las columnas y sus créditos reaparecen al activarla.
+- **Historial**: el creador no ve los cambios de crédito de otras empresas (ficha y «Historial de cambios»). El filtro usa la columna nueva `historial.empresa_id` y no el nombre de la empresa, así que renombrar una empresa (o darle a otra su nombre anterior) no muestra ni oculta registros que no correspondan; el texto «Crédito · EMPRESA» guarda el nombre que tenía la empresa en ese momento.
+- **Validaciones**: «Sin crédito en ninguna empresa» reemplaza a «Sin condición de crédito».
+- **Importación**: nueva opción `--empresa NOMBRE`; el crédito del Excel se guarda para esa empresa. Sin `--empresa` se importan los proveedores sin crédito y el resumen lo dice; una empresa inexistente da error.
+- Pruebas: +29 en 5 archivos nuevos (`test_revision_textos`, `test_empresas`, `test_credito_empresas`, `test_proveedor_empresas`, `test_vistas_revisor`) y 3 en `test_importacion`; aserciones antiguas ajustadas a los textos y al crédito por empresa. Las pruebas corren en un `.venv` local con `requirements-dev.txt`.
+- **Pendiente — facturación por empresa**: la facturación (apagada) sigue calculando vencimientos con las columnas antiguas `proveedores.credito_tipo/credito_valor`, que ninguna pantalla escribe ya. Se retoma cuando se reactive la facturación.
+- **Migración de datos**: ver sesión 11 (solo cubre las columnas nuevas; los créditos antiguos no se trasladan).
+
 ### Sesión 9 · 2026-11-16 · Los aprobados salen de «Validaciones»
 
 - Decisión del usuario: una vez aprobado, el proveedor ya fue revisado y no debe aparecer en «Validaciones» (p. ej. un RUC de sociedad dudoso). Solo se listan los pendientes y rechazados.
@@ -125,5 +160,4 @@ Hecho a partir de una revisión de las pantallas; sin dependencias nuevas ni int
 ### Notas
 
 - El Excel `datos/proveedores.xlsx` es confidencial: no se sube a ningún servicio ni a git, y no se copiaron datos de proveedores a ningún archivo del proyecto.
-- La carpeta no es un repositorio git todavía.
 - `PROMPT.md` es el encargo original; este changelog recoge los cambios de alcance posteriores, que tienen prioridad sobre él.

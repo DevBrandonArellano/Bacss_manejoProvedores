@@ -4,8 +4,8 @@ from datetime import timedelta
 from sqlalchemy import select
 
 from app import config
-from app.modelos import FACTURA_PAGADA, FACTURA_PENDIENTE, Factura, Proveedor
-from test_web import _crear_proveedor, _en_base, _uno, equipo  # noqa: F401  (equipo es un fixture)
+from app.modelos import FACTURA_PAGADA, FACTURA_PENDIENTE, Factura, Proveedor, ProveedorCredito
+from test_web import _credito_antiguo, _crear_proveedor, _en_base, _uno, equipo  # noqa: F401  (equipo es un fixture)
 from ayudas import formulario_proveedor, publicar
 
 HTMX = {"HX-Request": "true"}
@@ -62,7 +62,8 @@ def test_aviso_de_identificacion_y_cuenta_repetidas(equipo, ids_catalogo):
     pid = _crear_proveedor(creador, ids_catalogo)
     base = {"tipo_id_id": str(ids_catalogo["tipo_id"]), "numero_id": "0190000000001", "numero_cuenta": "0009876543"}
     texto = creador.get("/proveedores/verificar", params=base, headers=HTMX).text
-    assert "Ya existe un proveedor con ese" in texto and "ya lo tiene otro proveedor" in texto
+    # En el alta, la identificación repetida es una alerta: al guardar solo se añade el crédito de su empresa.
+    assert "ya está registrado" in texto and "crédito de su empresa" in texto and "ya lo tiene otro proveedor" in texto
     assert f"/proveedores/{pid}" in texto
     # Editando el mismo proveedor no se avisa contra sí mismo.
     propio = creador.get("/proveedores/verificar", params={**base, "pid": str(pid)}, headers=HTMX).text
@@ -71,7 +72,7 @@ def test_aviso_de_identificacion_y_cuenta_repetidas(equipo, ids_catalogo):
     limpio = creador.get(
         "/proveedores/verificar", params={**base, "numero_id": "0190000000002", "numero_cuenta": "111"}, headers=HTMX
     ).text
-    assert "Ya existe" not in limpio and "ya lo tiene" not in limpio
+    assert "ya está registrado" not in limpio and "ya lo tiene" not in limpio
     # Es una pantalla para quien edita.
     assert equipo["aprobador"].get("/proveedores/verificar", params=base, headers=HTMX).status_code == 403
 
@@ -91,7 +92,7 @@ def test_guardar_sin_los_campos_de_credito_ocultos(equipo, ids_catalogo):
     datos.pop("credito_dias"), datos.pop("credito_dia")
     respuesta = publicar(equipo["creador"], "/proveedores/nuevo", datos)
     assert respuesta.status_code == 303
-    assert _uno(select(Proveedor)).credito_tipo == "fin_mes"
+    assert _uno(select(ProveedorCredito)).credito_tipo == "fin_mes"
 
 
 # ---------------------------------------------------------------- facturas
@@ -99,7 +100,8 @@ def test_guardar_sin_los_campos_de_credito_ocultos(equipo, ids_catalogo):
 
 def test_vista_previa_del_vencimiento(equipo, ids_catalogo):
     creador = equipo["creador"]
-    pid = _crear_proveedor(creador, ids_catalogo)  # 15 días de crédito, pendiente de aprobar
+    pid = _crear_proveedor(creador, ids_catalogo)  # pendiente de revisar
+    _credito_antiguo(pid)  # 15 días de crédito para la facturación
     hoy = config.hoy()
     texto = creador.get(
         "/facturas/vencimiento", params={"proveedor_id": str(pid), "fecha": hoy.isoformat()}, headers=HTMX
@@ -188,6 +190,7 @@ def test_panel_oculta_tablas_vacias_y_enlaza_las_tarjetas(equipo, ids_catalogo):
     creador = equipo["creador"]
     assert "Todo al día" in creador.get("/").text
     pid = _crear_proveedor(creador, ids_catalogo)
+    _credito_antiguo(pid)  # 15 días de crédito para la facturación
     _factura(creador, pid, "F-HOY", config.hoy() - timedelta(days=15), valor="480.75")
     texto = creador.get("/").text
     assert "Todo al día" not in texto

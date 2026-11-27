@@ -12,6 +12,7 @@ Reglas:
 - Lo que no se puede importar se omite y se explica por hoja y fila. El informe nunca incluye nombres,
   identificaciones ni cuentas: la fila se busca en el Excel.
 """
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -19,11 +20,30 @@ from sqlalchemy import select
 
 from . import config, credito, servicios
 from .catalogos import texto_codigo
-from .modelos import APROBADO, Banco, Proveedor, TipoCuenta, TipoId, Usuario
+from .modelos import APROBADO, Banco, Empresa, Proveedor, TipoCuenta, TipoId, Usuario
 from .servicios import ErrorNegocio, limpiar, normalizar, partes_correo, sin_espacios
 
 OBLIGATORIAS = {"TIPO ID", "NUMERO ID", "TIPO CTA", "NUMERO CTA", "BANCOS"}
-SINONIMOS_CUENTA = {"CORRIENTE": "CTE", "AHORROS": "AHO", "AHORRO": "AHO"}
+# Otros nombres de encabezado que traen los Excel de cada empresa -> el nombre que usa el importador.
+ALIAS_ENCABEZADOS = {
+    "TIPO DE IDENTIFICACION": "TIPO ID",
+    "IDENTIFICACION": "NUMERO ID",
+    "TIPO DE CUENTA": "TIPO CTA",
+    "CUENTA": "NUMERO CTA",
+    "BANCO": "BANCOS",
+    "CORREO ELECTRONICO": "CORREO",
+}
+SINONIMOS_CUENTA = {
+    "CORRIENTE": "CTE", "AHORROS": "AHO", "AHORRO": "AHO",
+    "CUENTA CORRIENTE": "CTE", "CUENTA AHORROS": "AHO", "CUENTA DE AHORROS": "AHO",
+}
+# Palabras que no distinguen un banco de otro al comparar nombres abreviados («B. DEL PICHINCHA» ~ «BANCO PICHINCHA C.A.»).
+_PALABRAS_VACIAS = {"B", "BANCO", "DE", "DEL", "LA", "EL", "S", "A", "C", "SA", "CA", "BP", "P", "SUCURSAL"}
+
+
+def _clave_banco(texto) -> frozenset:
+    palabras = re.sub(r"[^A-Z0-9 ]", " ", normalizar(texto)).split()
+    return frozenset(w for w in palabras if w not in _PALABRAS_VACIAS)
 
 
 @dataclass
@@ -36,18 +56,26 @@ class Resumen:
     repetidos: int = 0
     omitidos: List[Tuple[str, int, str]] = field(default_factory=list)  # (hoja, fila, motivo)
     avisos: List[Tuple[str, int, str]] = field(default_factory=list)  # importado, pero con algo que revisar
+    creditos: int = 0  # créditos guardados para la empresa indicada
+    con_empresa: bool = False
 
     def lineas(self) -> List[str]:
+        creditos = (
+            f"Créditos importados: {self.creditos}"
+            if self.con_empresa
+            else "Créditos del Excel: no importados (indique --empresa)"
+        )
         return [
             f"Hojas leídas: {', '.join(self.hojas) or '(ninguna)'}",
             f"Filas con datos de proveedor: {self.filas_con_datos}",
             f"Importados: {self.importados}",
-            f"  - ya aprobados (REGISTRADO = OK en el Excel): {self.aprobados}",
-            f"  - pendientes de aprobación: {self.importados - self.aprobados}",
+            f"  - ya revisados (REGISTRADO = OK en el Excel): {self.aprobados}",
+            f"  - pendientes de revisión: {self.importados - self.aprobados}",
             f"Ya existían en la base (sin cambios): {self.ya_existian}",
             f"Repetidos en el propio Excel con los mismos datos: {self.repetidos}",
             f"Omitidos: {len(self.omitidos)}",
             f"Importados con algo que revisar: {len(self.avisos)}",
+            creditos,
         ]
 
 
@@ -74,6 +102,7 @@ def _columnas(fila_encabezados) -> Optional[Dict[str, int]]:
     posiciones = {}
     for i, valor in enumerate(fila_encabezados):
         nombre = _encabezado(valor)
+        nombre = ALIAS_ENCABEZADOS.get(nombre, nombre)
         if nombre and nombre not in posiciones:
             posiciones[nombre] = i
     if not OBLIGATORIAS <= set(posiciones):
@@ -84,7 +113,8 @@ def _columnas(fila_encabezados) -> Optional[Dict[str, int]]:
         "cta_tipo": posiciones["TIPO CTA"],
         "cta_numero": posiciones["NUMERO CTA"],
         "banco": posiciones["BANCOS"],
-        "nombre": 0,
+        # El nombre es la primera columna, salvo que haya una «Nombre Beneficiario».
+        "nombre": posiciones.get("NOMBRE BENEFICIARIO", 0),
     }
     for clave, nombre in (("credito", "DIAS CREDITO"), ("registrado", "REGISTRADO"), ("correo", "CORREO")):
         if nombre in posiciones:
@@ -138,6 +168,21 @@ class _Catalogos:
         for b in db.scalars(select(Banco).where(Banco.activo.is_(True))).all():
             self.bancos_por_nombre.setdefault(b.nombre_norm, []).append(b)
             self.bancos_por_codigo.setdefault(b.codigo, []).append(b)
+        self.bancos_activos = list(db.scalars(select(Banco).where(Banco.activo.is_(True))).all())
+
+    def _por_nombre_abreviado(self, nombre: str) -> Optional[Banco]:
+        """Banco cuyo nombre coincide, sin las palabras vacías, con uno solo del catálogo (si hay duda, ninguno)."""
+        clave = _clave_banco(nombre)
+        if not clave:
+            return None
+        iguales = [b for b in self.bancos_activos if _clave_banco(b.nombre) == clave]
+        if len(iguales) == 1:
+            return iguales[0]
+        if not iguales:
+            contenidos = [b for b in self.bancos_activos if clave <= _clave_banco(b.nombre)]
+            if len(contenidos) == 1:
+                return contenidos[0]
+        return None
 
     def banco(self, nombre: Optional[str], codigo: Optional[str]) -> Optional[Banco]:
         if nombre:
@@ -148,6 +193,10 @@ class _Catalogos:
                 con_codigo = [b for b in coincidencias if b.codigo == codigo]
                 if len(con_codigo) == 1:
                     return con_codigo[0]
+            if not coincidencias:
+                abreviado = self._por_nombre_abreviado(nombre)
+                if abreviado is not None:
+                    return abreviado
         if codigo:
             por_codigo = self.bancos_por_codigo.get(codigo, [])
             if len(por_codigo) == 1:
@@ -188,7 +237,7 @@ def _aprobar_por_excel(db, p: Proveedor, usuario: Usuario) -> None:
     p.aprobado_en = config.ahora()
     p.motivo_rechazo = None
     servicios._registrar(
-        db, p, usuario, "aprobacion", "Estado de aprobación", "Pendiente", "Aprobado (según el Excel: REGISTRADO = OK)"
+        db, p, usuario, "aprobacion", "Estado de revisión", "Pendiente", "Revisado (según el Excel: REGISTRADO = OK)"
     )
 
 
@@ -199,9 +248,13 @@ def _firma(datos: dict) -> tuple:
 # ---------------------------------------------------------------- importación
 
 
-def importar(db, ruta, usuario: Usuario) -> Resumen:
-    """Crea los proveedores del Excel. No hace commit: quien llama decide (guardar o descartar)."""
-    resumen = Resumen()
+def importar(db, ruta, usuario: Usuario, empresa: Optional[Empresa] = None) -> Resumen:
+    """Crea los proveedores del Excel. No hace commit: quien llama decide (guardar o descartar).
+
+    El crédito del Excel es de una empresa: solo se guarda si se indica `empresa`. Los proveedores que ya
+    existían no se tocan (tampoco su crédito).
+    """
+    resumen = Resumen(con_empresa=empresa is not None)
     hojas = leer_hojas(ruta)
     if not hojas:
         raise ErrorNegocio(
@@ -281,14 +334,18 @@ def importar(db, ruta, usuario: Usuario) -> Resumen:
                 "numero_cuenta": numero_cta,
                 "banco_id": banco.id if banco else None,
                 "correo": correo,
-                "credito_tipo": tipo_cred,
-                "credito_valor": valor_cred,
                 "registrado_banco": normalizar(_texto_celda(_celda(fila, cols, "registrado"))) == "OK",
                 "notas": "\n".join(t for t in notas if t) or None,
             }
             clave_prov = (tipo_id.id, numero_id)
             if clave_prov in existentes:
                 resumen.ya_existian += 1
+                # Un proveedor de otra empresa: sus datos no se tocan, pero se le añade el crédito de esta empresa.
+                if empresa is not None and tipo_cred and not credito.validar(tipo_cred, valor_cred):
+                    p = servicios.proveedor_por_id(db, tipo_id.id, numero_id)
+                    if p is not None and p.credito_de(empresa.id) is None:
+                        if servicios.aplicar_credito(db, p, empresa, tipo_cred, valor_cred, usuario):
+                            resumen.creditos += 1
                 continue
             if clave_prov in vistos:
                 hoja0, fila0, firma0, creado = vistos[clave_prov]
@@ -304,10 +361,16 @@ def importar(db, ruta, usuario: Usuario) -> Resumen:
                 continue
 
             errores = servicios.validar_datos(db, datos)
+            error_credito = credito.validar(tipo_cred, valor_cred)  # p. ej. 400 días: se omite, como antes
+            if error_credito:
+                errores.append(error_credito)
             if errores:
                 omitir(" ".join(errores))
                 continue
             p = servicios.crear_proveedor(db, datos, usuario)
+            if empresa is not None and tipo_cred:
+                if servicios.aplicar_credito(db, p, empresa, tipo_cred, valor_cred, usuario):
+                    resumen.creditos += 1
             vistos[clave_prov] = (nombre_hoja, n, _firma(datos), p)
             resumen.importados += 1
             if datos["registrado_banco"]:

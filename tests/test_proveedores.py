@@ -175,6 +175,9 @@ def test_validaciones_detectan_datos_sospechosos(sesion, personas):
         creador,
     )
     sesion.commit()
+    # «Sin crédito» significa sin crédito en ninguna empresa: todos menos el incompleto tienen el de su empresa.
+    for p in (base, misma_cuenta, correo_malo, id_corto):
+        ayudas.con_credito(sesion, p, creador.empresa, creador)
 
     grupos = {g["clave"]: {c["proveedor"].id for c in g["casos"]} for g in validaciones.revisar(sesion)}
 

@@ -59,3 +59,10 @@ Las alarmas están definidas arriba como **avisos de vencimiento de pago según 
 4. Al final dime con claridad qué quedó funcionando y verificado, y qué no.
 
 Está terminada cuando puedo ejecutar `docker compose up -d`, entrar con mi usuario, ver todos los proveedores del Excel importados, crear y editar uno, registrar una factura y verla aparecer en el panel de alarmas el día que corresponde.
+
+## Cambios de alcance posteriores (2026-11-17)
+
+Este encargo es el original; `CHANGELOG.md` recoge los cambios posteriores y tiene prioridad. El más reciente:
+
+- **«Aprobación» pasa a llamarse «Revisión»** en todo lo que se ve (menú «Revisiones», perfil «Revisor», estado «Revisado»): lo que se comprueba es que el proveedor esté creado en otra plataforma.
+- **Empresas y crédito por empresa**: varias personas registran proveedores, cada una para su empresa. Un proveedor existe una sola vez y cada empresa guarda su propio crédito con él. Cada creador tiene una empresa asignada; el revisor ve una columna de crédito por empresa. Ver «Empresas y crédito por empresa» en el `README.md`.

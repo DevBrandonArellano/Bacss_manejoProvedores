@@ -3,8 +3,9 @@ from collections import defaultdict
 from typing import Dict, List
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
-from . import config, identificacion
+from . import identificacion
 from .modelos import APROBADO, Proveedor
 from .servicios import LARGO_ID, correo_valido
 
@@ -19,7 +20,7 @@ GRUPOS = [
     ("id_dudoso", "RUC de sociedad con dígito verificador dudoso", "media"),
     ("correo_malo", "Correo mal formado", "media"),
     ("sin_correo", "Sin correo", "baja"),
-    ("sin_credito", "Sin condición de crédito", "baja"),
+    ("sin_credito", "Sin crédito en ninguna empresa", "baja"),
     ("nombre_duplicado", "Nombre repetido", "baja"),
 ]
 
@@ -31,7 +32,7 @@ def revisar(db, incluir_inactivos: bool = False) -> List[dict]:
     (si luego se cambia algo sensible vuelve a Pendiente y sus avisos reaparecen). Los duplicados se buscan contra
     todos los proveedores, aprobados o no.
     """
-    consulta = select(Proveedor).order_by(Proveedor.nombre_norm)
+    consulta = select(Proveedor).options(selectinload(Proveedor.creditos)).order_by(Proveedor.nombre_norm)
     if not incluir_inactivos:
         consulta = consulta.where(Proveedor.activo.is_(True))
     proveedores = db.scalars(consulta).all()
@@ -66,10 +67,8 @@ def revisar(db, incluir_inactivos: bool = False) -> List[dict]:
         else:
             if not correo_valido(p.correo):
                 casos["correo_malo"].append((p, "El correo no tiene un formato válido."))
-        if not p.credito_tipo:
-            casos["sin_credito"].append(
-                (p, "Sus facturas se tratarán como de contado." if config.actual.facturacion_activa else "No tiene condición de crédito definida.")
-            )
+        if not p.creditos:
+            casos["sin_credito"].append((p, "No tiene condición de crédito en ninguna empresa."))
         por_nombre[p.nombre_norm].append(p)
 
     for cuenta, lista in por_cuenta.items():

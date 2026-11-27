@@ -129,7 +129,7 @@ def test_proveedor_sin_aprobar_no_se_exporta(sesion, personas):
     sesion.commit()
     f = ayudas.factura(sesion, p, personas["creador"])
 
-    assert "no está aprobado" in exportacion.motivo_bloqueo(f)
+    assert "no está revisado" in exportacion.motivo_bloqueo(f)
     with pytest.raises(ValueError):
         exportacion.libro_pago_masivo([f], "1")
 
@@ -145,7 +145,7 @@ def test_cambiar_la_cuenta_bloquea_la_exportacion_hasta_reaprobar(sesion, person
 
     servicios.aplicar_cambios(sesion, p, {"numero_cuenta": "0099999999"}, personas["creador"])
     sesion.commit()
-    assert "no está aprobado" in exportacion.motivo_bloqueo(f)
+    assert "no está revisado" in exportacion.motivo_bloqueo(f)
 
     servicios.aprobar(sesion, p, personas["aprobador"])
     sesion.commit()
@@ -187,12 +187,18 @@ def test_exportar_listado_de_proveedores(sesion, personas):
     from app.modelos import Proveedor
 
     proveedores = sesion.scalars(select(Proveedor)).all()
-    libro = openpyxl.load_workbook(io.BytesIO(exportacion.a_bytes(exportacion.libro_proveedores(proveedores))))
+    empresa = personas["creador"].empresa
+    ayudas.con_credito(sesion, proveedores[0], empresa, personas["creador"], "dias", 30)
+    libro = openpyxl.load_workbook(
+        io.BytesIO(exportacion.a_bytes(exportacion.libro_proveedores(proveedores, [empresa])))
+    )
     filas = list(libro["Proveedores"].iter_rows(values_only=True))
-    assert list(filas[0]) == exportacion.ENCABEZADOS_PROVEEDORES
+    esperado = list(exportacion.ENCABEZADOS_PROVEEDORES)
+    esperado.insert(esperado.index("CORREO") + 1, "CREDITO EMPRESA A")
+    assert list(filas[0]) == esperado and "DIAS CREDITO" not in esperado
     fila = dict(zip(filas[0], filas[1]))
     assert fila["NUMERO ID"] == "0990000000001"
     assert fila["NUMERO CTA"] == "0012345678"
     assert fila["CODIGO BANCO"] == "0042"
-    assert fila["ESTADO APROBACION"] == "Aprobado"
-    assert fila["DIAS CREDITO"] == "30"
+    assert fila["ESTADO REVISION"] == "Revisado"
+    assert fila["CREDITO EMPRESA A"] == "30"

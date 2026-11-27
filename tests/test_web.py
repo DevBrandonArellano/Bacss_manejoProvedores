@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 import ayudas
 from app import config, db
-from app.modelos import ADMINISTRADOR, APROBADO, FACTURA_PAGADA, PENDIENTE, Banco, Factura, Proveedor, Usuario
+from app.modelos import ADMINISTRADOR, APROBADO, FACTURA_PAGADA, PENDIENTE, Banco, Empresa, Factura, Proveedor, Usuario
 from ayudas import CLAVE_ADMIN, clave_de, entrar, formulario_proveedor, publicar
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -45,19 +45,38 @@ def _uno(consulta):
 
 @pytest.fixture
 def equipo(cliente, otro_cliente):
-    """Tres navegadores: administrador, creador (carla) y aprobador (andres), creados por el administrador."""
+    """Cuatro navegadores creados por el administrador: administrador, creador de EMPRESA A (carla),
+    creador de EMPRESA B (diana, «creador2») y revisor (andres)."""
     entrar(cliente, "admin", CLAVE_ADMIN)
-    for usuario, rol in (("carla", "creador"), ("andres", "aprobador")):
+    empresas = {}
+    for nombre in ("EMPRESA A", "EMPRESA B"):
+        assert publicar(cliente, "/empresas/nueva", {"nombre": nombre}).status_code == 303
+        empresas[nombre] = str(_uno(select(Empresa).where(Empresa.nombre == nombre)).id)
+    for usuario, rol, empresa in (
+        ("carla", "creador", "EMPRESA A"), ("diana", "creador", "EMPRESA B"), ("andres", "aprobador", None)
+    ):
         respuesta = publicar(
             cliente,
             "/usuarios/nuevo",
-            {"usuario": usuario, "nombre": usuario.capitalize(), "clave": clave_de(usuario), "rol": rol},
+            {"usuario": usuario, "nombre": usuario.capitalize(), "clave": clave_de(usuario), "rol": rol,
+             "empresa_id": empresas.get(empresa, "")},
         )
         assert respuesta.status_code == 303
-    creador, aprobador = otro_cliente(), otro_cliente()
+        _uno(select(Usuario).where(Usuario.usuario == usuario))  # se creó de verdad
+    creador, creador2, aprobador = otro_cliente(), otro_cliente(), otro_cliente()
     entrar(creador, "carla", clave_de("carla"))
+    entrar(creador2, "diana", clave_de("diana"))
     entrar(aprobador, "andres", clave_de("andres"))
-    return {"admin": cliente, "creador": creador, "aprobador": aprobador}
+    return {"admin": cliente, "creador": creador, "creador2": creador2, "aprobador": aprobador}
+
+
+def _credito_antiguo(pid: int, tipo: str = "dias", valor=15) -> None:
+    """La facturación (fuera de alcance del crédito por empresa) sigue leyendo las columnas antiguas
+    `Proveedor.credito_tipo/credito_valor`, que ya no escribe ninguna pantalla: las pruebas de facturas las fijan aquí."""
+    with db.SessionLocal() as s:
+        p = s.get(Proveedor, pid)
+        p.credito_tipo, p.credito_valor = tipo, valor
+        s.commit()
 
 
 def _crear_proveedor(navegador, ids_catalogo, **cambios) -> int:
@@ -244,7 +263,7 @@ def test_aprobacion_en_bloque(equipo, ids_catalogo):
     ]
     pagina = aprobador.get("/aprobaciones")
     assert pagina.status_code == 200
-    assert "PROVEEDOR EN BLOQUE 1" in pagina.text and "Aprobar seleccionados" in pagina.text
+    assert "PROVEEDOR EN BLOQUE 1" in pagina.text and "Marcar seleccionados como revisados" in pagina.text
 
     assert publicar(aprobador, "/aprobaciones/lote", {"ids": [str(i) for i in ids[:2]]}).status_code == 303
     estados = {p.id: p.estado_aprobacion for p in _en_base(select(Proveedor))}
@@ -331,6 +350,7 @@ def test_recorrido_completo_de_creador_y_aprobador(equipo, ids_catalogo):
 
     # 1. El creador registra el proveedor a mano; nace pendiente y conserva los ceros a la izquierda.
     pid = _crear_proveedor(creador, ids_catalogo)
+    _credito_antiguo(pid)  # 15 días, para el vencimiento de sus facturas
     ficha = creador.get(f"/proveedores/{pid}")
     assert ficha.status_code == 200
     assert "DISTRIBUIDORA FICTICIA CIA. LTDA." in ficha.text
@@ -380,14 +400,14 @@ def test_recorrido_completo_de_creador_y_aprobador(equipo, ids_catalogo):
     # 6. Mientras el proveedor no esté aprobado, sus facturas no salen en el archivo de pago.
     bloqueado = publicar(creador, "/facturas/exportar", {"ids": [str(de_hoy.id)]})
     assert bloqueado.status_code == 400
-    assert "no está aprobado" in bloqueado.text
+    assert "no está revisado" in bloqueado.text
     assert "No exportable" in creador.get("/facturas").text
 
     # 7. El aprobador aprueba.
     assert publicar(aprobador, f"/aprobaciones/{pid}/aprobar").status_code == 303
     assert "insignia-aprobado" in creador.get(f"/proveedores/{pid}").text
-    aprobador.get("/")  # consume el mensaje "Aprobado: ..." que se muestra una sola vez
-    assert "No hay proveedores pendientes de aprobación" in aprobador.get("/aprobaciones").text
+    aprobador.get("/")  # consume el mensaje "Revisado: ..." que se muestra una sola vez
+    assert "No hay proveedores pendientes de revisión" in aprobador.get("/aprobaciones").text
 
     # 8. Ahora sí se genera el archivo de pago masivo, con el formato de la hoja de pago.
     archivo = publicar(creador, "/facturas/exportar", {"ids": [str(de_hoy.id), str(futura.id)]})
@@ -449,8 +469,13 @@ def test_formulario_de_proveedor_muestra_errores(equipo, ids_catalogo):
     assert "13 dígitos" in respuesta.text and "correo" in respuesta.text
     assert _en_base(select(Proveedor)) == []
 
-    _crear_proveedor(creador, ids_catalogo)
+    pid = _crear_proveedor(creador, ids_catalogo)
+    # Repetir la identificación ya no es un error: se reconoce el proveedor existente (ver test_proveedor_empresas).
     repetido = publicar(creador, "/proveedores/nuevo", formulario_proveedor(ids_catalogo, nombre="OTRO NOMBRE"))
+    assert repetido.status_code == 303 and repetido.headers["location"] == f"/proveedores/{pid}"
+    # Editar otro proveedor con una identificación ya usada sí se rechaza.
+    otro = _crear_proveedor(creador, ids_catalogo, numero_id="0990000000001")
+    repetido = publicar(creador, f"/proveedores/{otro}/editar", formulario_proveedor(ids_catalogo))
     assert repetido.status_code == 400 and "Ya existe" in repetido.text
 
 

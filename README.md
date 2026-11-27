@@ -25,11 +25,26 @@ La app reinicia sola con el equipo (`restart: unless-stopped`). Arranca **vacía
 
 | Perfil | Puede |
 |---|---|
-| Creador | Registrar y editar proveedores y facturas |
-| Aprobador | Aprobar o rechazar proveedores en «Aprobaciones» |
-| Administrador | Usuarios, catálogos y configuración |
+| Creador | Trabaja para una empresa: registra y edita proveedores (y facturas) y el crédito que su empresa tiene con ellos |
+| Revisor | Ve el crédito de todas las empresas y marca como revisados o rechaza proveedores en «Revisiones» |
+| Administrador | Empresas, usuarios, catálogos y configuración; puede cambiar el crédito de cualquier empresa |
 
-Flujo de aprobación: un proveedor nuevo queda *Pendiente*; si se cambian sus datos bancarios o de identificación vuelve a *Pendiente*; nadie aprueba lo que él mismo creó o modificó; solo los proveedores aprobados entran en el pago masivo.
+Flujo de revisión: un proveedor nuevo queda *Pendiente*; si se cambian sus datos bancarios o de identificación vuelve a *Pendiente*; nadie revisa lo que él mismo creó o modificó; solo los proveedores revisados entran en el pago masivo. Lo que se comprueba al revisar es que el proveedor esté creado en la otra plataforma. Cambiar el crédito de una empresa **no** devuelve el proveedor a *Pendiente*.
+
+## Empresas y crédito por empresa
+
+Cada proveedor existe **una sola vez**, pero cada empresa le maneja su propio crédito (contado, 15 días, fin de mes…).
+
+1. **Crear las empresas**: Administración → Empresas. Se pueden renombrar y desactivar; una empresa desactivada desaparece de las pantallas, pero sus créditos se conservan y reaparecen al activarla.
+2. **Asignar la empresa a cada creador**: Administración → Usuarios, columna «Empresa». Es obligatoria para el perfil Creador; un creador sin empresa activa no puede registrar proveedores.
+3. **Qué ve cada perfil**:
+   - El creador ve y cambia solo el crédito de su empresa (en el listado, la ficha y el historial).
+   - El revisor ve una columna de crédito por cada empresa activa en el listado, en «Revisiones» y en la exportación; no puede cambiarlos.
+   - El administrador ve todas y puede cambiar cualquiera desde la ficha del proveedor.
+4. **Proveedor ya registrado**: si un creador registra un proveedor con un tipo y número de ID que ya existe, la app no crea otro ni cambia sus datos: solo añade el crédito de la empresa del creador y lo lleva a la ficha. El formulario lo avisa mientras se escribe.
+5. Los cambios de crédito quedan en el historial como «Crédito · NOMBRE DE LA EMPRESA».
+
+> **Bases anteriores:** al arrancar, la app agrega sola las columnas nuevas (`usuarios.empresa_id` e `historial.empresa_id`) a una base creada con una versión anterior, sin perder datos. Después hay que asignar la empresa a cada creador (Administración → Usuarios). Los créditos antiguos (`proveedores.credito_tipo/credito_valor`) se pasan a una empresa con `migrar-creditos` (ver abajo); las columnas antiguas se conservan.
 
 ## Facturas (apagadas por ahora)
 
@@ -37,7 +52,7 @@ Por ahora la app solo registra proveedores. Las facturas, el panel de pagos, las
 
 - Apagado: no aparecen «Panel» ni «Facturas» en el menú, el inicio es la lista de proveedores, y las direcciones `/facturas…` responden «no existe». La tarea diaria solo hace el respaldo.
 - Para volver a usarlas: poner `FACTURACION_ACTIVA=true` en `.env` y ejecutar `docker compose up -d` (no basta `restart`). Los datos de facturas que ya existan en la base se conservan.
-- Las condiciones de crédito de cada proveedor se siguen guardando.
+- La facturación todavía no usa el crédito por empresa: calcula los vencimientos con el crédito antiguo del proveedor, que ya no se edita en pantalla. La facturación por empresa queda pendiente.
 
 ## Validación de cédula y RUC
 
@@ -58,18 +73,30 @@ El panel inicial muestra facturas vencidas, que vencen hoy y las de los próximo
 
 ## Importar proveedores desde un Excel
 
-Carga los proveedores de un libro con hojas que tengan las columnas `TIPO ID`, `NUMERO ID`, `TIPO CTA`, `NUMERO CTA` y `BANCOS` (el nombre va en la primera columna). Las demás hojas se ignoran. Copie el archivo a la carpeta `datos/` (no se sube a git) y ejecute:
+Carga los proveedores de un libro con hojas que tengan las columnas `TIPO ID`, `NUMERO ID`, `TIPO CTA`, `NUMERO CTA` y `BANCOS` (el nombre va en la primera columna). También se aceptan los encabezados de los libros de otras empresas: `Tipo de Identificación`, `Identificación`, `Nombre Beneficiario`, `Tipo de Cuenta`, `Cuenta`, `Banco` y `Correo Electrónico`; los bancos abreviados («B. DEL PICHINCHA») se reconocen si coinciden con uno solo del catálogo. Las demás hojas se ignoran. Copie el archivo a la carpeta `datos/` (no se sube a git) y ejecute:
 
 ```
 docker compose run --rm --no-deps app python -m app.cli importar-proveedores /app/datos/ARCHIVO.xlsx --usuario admin
-docker compose run --rm --no-deps app python -m app.cli importar-proveedores /app/datos/ARCHIVO.xlsx --usuario admin --aplicar
+docker compose run --rm --no-deps app python -m app.cli importar-proveedores /app/datos/ARCHIVO.xlsx --usuario admin --empresa "NOMBRE DE LA EMPRESA" --aplicar
 ```
 
 - Sin `--aplicar` solo **simula** y muestra el resumen. Con `--aplicar` hace antes un respaldo y guarda todo en una sola transacción.
-- Cada proveedor se identifica por tipo + número de ID. Si ya existe se deja como está, así que se puede volver a correr sin duplicar ni pisar cambios hechos a mano.
-- Los marcados `OK` en la columna `REGISTRADO` entran **aprobados** (queda anotado en su historial); el resto queda **pendiente** de aprobación.
+- `--empresa` indica a qué empresa pertenece la columna de crédito del Excel (sin distinguir mayúsculas ni tildes; la empresa debe existir y estar activa). Sin `--empresa` los proveedores se importan igual, pero **sin crédito**, y el resumen lo indica.
+- Cada proveedor se identifica por tipo + número de ID. Si ya existe se dejan como están sus datos; con `--empresa` solo se le añade el crédito de esa empresa si aún no tenía (nunca se cambia uno existente). Se puede volver a correr sin duplicar ni pisar cambios hechos a mano.
+- Los marcados `OK` en la columna `REGISTRADO` entran **revisados** (queda anotado en su historial); el resto queda **pendiente** de revisión.
 - Lo que no se puede importar (ID vacío o con largo incorrecto, otra cuenta para el mismo ID, etc.) se omite y se lista por hoja y fila, sin mostrar datos personales. Un proveedor con dos cuentas distintas en el Excel entra con la de la primera fila; la otra debe revisarse a mano.
 - Un banco, un correo o un crédito que no se reconocen no impiden la importación: el proveedor entra sin ese dato y se avisa (el correo inválido queda en las notas). La pantalla «Validaciones» los muestra.
+
+### Pasar el crédito antiguo a una empresa
+
+Los créditos importados antes de que existieran las empresas están en columnas antiguas. Para pasarlos a la empresa a la que pertenecen:
+
+```
+docker compose run --rm --no-deps app python -m app.cli migrar-creditos --empresa "NOMBRE" --usuario admin
+docker compose run --rm --no-deps app python -m app.cli migrar-creditos --empresa "NOMBRE" --usuario admin --aplicar
+```
+
+Sin `--aplicar` solo simula. Con `--aplicar` hace un respaldo, no toca los créditos que la empresa ya tenga y deja las columnas antiguas intactas. Úsalo solo si todos los créditos antiguos son de una misma empresa; si vienen de un libro con varias hojas (una por empresa), vuelve a importar cada hoja con `--empresa` o corrige el crédito de cada empresa contra su Excel.
 
 ## Comandos de mantenimiento
 
@@ -121,8 +148,8 @@ Las pruebas usan datos inventados.
 1. `docker compose up -d` y entrar con el administrador inicial.
 2. Correr las pruebas dentro del contenedor.
 3. Comprobar que el catálogo de instituciones cargó con sus códigos.
-4. Crear un usuario creador y otro aprobador.
-5. Recorrido completo: crear proveedor → aprobarlo con el otro usuario → registrar factura → verla en el panel el día que corresponde → exportar pago masivo.
+4. Crear las empresas, un usuario creador por empresa y un revisor.
+5. Recorrido completo: crear proveedor → registrar el mismo proveedor con el creador de otra empresa (queda uno solo, con dos créditos) → marcarlo como revisado con el revisor → comprobar que el revisor ve una columna por empresa.
 
 ## Datos confidenciales
 

@@ -1,4 +1,4 @@
-"""Reglas de negocio: proveedores, aprobación, facturas, usuarios y configuración."""
+"""Reglas de negocio: proveedores, revisión, facturas, usuarios y configuración."""
 import logging
 import re
 import unicodedata
@@ -6,23 +6,27 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from . import config, credito, identificacion, seguridad
 from .modelos import (
     ADMINISTRADOR,
     APROBADO,
+    APROBADOR,
     FACTURA_ANULADA,
     FACTURA_PAGADA,
     FACTURA_PENDIENTE,
     PENDIENTE,
     RECHAZADO,
     ROLES,
+    CREADOR,
     Banco,
     Configuracion,
+    Empresa,
     Factura,
     Historial,
     Proveedor,
+    ProveedorCredito,
     TipoCuenta,
     TipoId,
     Usuario,
@@ -130,7 +134,55 @@ def sembrar(db) -> None:
     db.commit()
 
 
-def crear_usuario(db, usuario: str, nombre: str, clave: str, rol: str) -> Usuario:
+def crear_empresa(db, nombre: str) -> Empresa:
+    nombre = limpiar(nombre)
+    if not nombre:
+        raise ErrorNegocio("Escriba el nombre de la empresa.")
+    _empresa_no_repetida(db, nombre)
+    e = Empresa(nombre=nombre, nombre_norm=normalizar(nombre), activo=True)
+    db.add(e)
+    db.flush()
+    return e
+
+
+def _empresa_no_repetida(db, nombre: str, excluir_id: int = None) -> None:
+    consulta = select(Empresa).where(Empresa.nombre_norm == normalizar(nombre))
+    if excluir_id is not None:
+        consulta = consulta.where(Empresa.id != excluir_id)
+    if db.scalars(consulta).first() is not None:
+        raise ErrorNegocio("Ya existe una empresa con ese nombre.")
+
+
+def actualizar_empresa(db, e: Empresa, nombre: str, activo: bool) -> None:
+    nombre = limpiar(nombre)
+    if not nombre:
+        raise ErrorNegocio("Escriba el nombre de la empresa.")
+    _empresa_no_repetida(db, nombre, excluir_id=e.id)
+    e.nombre, e.nombre_norm, e.activo = nombre, normalizar(nombre), bool(activo)
+    db.flush()
+
+
+def empresas_activas(db) -> List[Empresa]:
+    return list(db.scalars(select(Empresa).where(Empresa.activo.is_(True)).order_by(Empresa.nombre_norm)).all())
+
+
+def empresa_de(u: Usuario) -> Optional[Empresa]:
+    """La empresa del usuario, solo si está activa."""
+    e = u.empresa
+    return e if e is not None and e.activo else None
+
+
+def _empresa_para(db, rol: str, activo: bool, empresa_id: Optional[int]) -> Optional[int]:
+    """La empresa que se guarda para un usuario: solo los creadores tienen una, y si están activos debe estar activa."""
+    if rol != CREADOR:
+        return None
+    e = db.get(Empresa, empresa_id) if empresa_id else None
+    if activo and (e is None or not e.activo):
+        raise ErrorNegocio("Elija la empresa de la persona (créela antes en Empresas).")
+    return e.id if e is not None else None
+
+
+def crear_usuario(db, usuario: str, nombre: str, clave: str, rol: str, empresa_id: Optional[int] = None) -> Usuario:
     usuario = (usuario or "").strip().lower()
     nombre = limpiar(nombre) or ""
     if not re.fullmatch(r"[a-z0-9._-]{3,60}", usuario):
@@ -144,6 +196,7 @@ def crear_usuario(db, usuario: str, nombre: str, clave: str, rol: str) -> Usuari
         raise ErrorNegocio(error)
     if db.scalar(select(Usuario).where(Usuario.usuario == usuario)) is not None:
         raise ErrorNegocio("Ya existe un usuario con ese nombre de usuario.")
+    empresa_id = _empresa_para(db, rol, True, empresa_id)
     nuevo = Usuario(
         usuario=usuario,
         nombre=nombre,
@@ -151,6 +204,7 @@ def crear_usuario(db, usuario: str, nombre: str, clave: str, rol: str) -> Usuari
         rol=rol,
         activo=True,
         creado_en=config.ahora(),
+        empresa_id=empresa_id,
     )
     db.add(nuevo)
     db.flush()
@@ -164,12 +218,15 @@ def admins_activos(db, excluir_id: int = None) -> int:
     return db.scalar(consulta) or 0
 
 
-def actualizar_usuario(db, u: Usuario, nombre: str, rol: str, activo: bool, clave: str = "") -> None:
+def actualizar_usuario(
+    db, u: Usuario, nombre: str, rol: str, activo: bool, clave: str = "", empresa_id: Optional[int] = None
+) -> None:
     nombre = limpiar(nombre) or ""
     if not nombre:
         raise ErrorNegocio("Escriba el nombre de la persona.")
     if rol not in ROLES:
         raise ErrorNegocio("Perfil desconocido.")
+    empresa_id = _empresa_para(db, rol, activo, empresa_id)
     deja_de_ser_admin = u.rol == ADMINISTRADOR and u.activo and (rol != ADMINISTRADOR or not activo)
     if deja_de_ser_admin and admins_activos(db, excluir_id=u.id) == 0:
         raise ErrorNegocio("Debe quedar al menos un administrador activo.")
@@ -181,6 +238,7 @@ def actualizar_usuario(db, u: Usuario, nombre: str, rol: str, activo: bool, clav
     u.nombre = nombre
     u.rol = rol
     u.activo = activo
+    u.empresa_id = empresa_id
 
 
 # ---------------------------------------------------------------- proveedores
@@ -197,7 +255,7 @@ CAMPOS = [
     "notas",
     "activo",
 ]
-# Un cambio en cualquiera de estos devuelve al proveedor a "Pendiente de aprobación".
+# Un cambio en cualquiera de estos devuelve al proveedor a "Pendiente de revisión".
 SENSIBLES = {"nombre", "tipo_id_id", "numero_id", "tipo_cuenta_id", "numero_cuenta", "banco_id"}
 ETIQUETAS = {
     "nombre": "Nombre",
@@ -232,7 +290,8 @@ def _mostrar(db, campo: str, valor) -> str:
     return str(valor)
 
 
-def _registrar(db, p: Proveedor, usuario: Usuario, tipo: str, campo: str, anterior, nuevo, sensible=False) -> None:
+def _registrar(db, p: Proveedor, usuario: Usuario, tipo: str, campo: str, anterior, nuevo, sensible=False,
+               empresa_id: Optional[int] = None) -> None:
     db.add(
         Historial(
             proveedor_id=p.id,
@@ -241,6 +300,7 @@ def _registrar(db, p: Proveedor, usuario: Usuario, tipo: str, campo: str, anteri
             valor_anterior=anterior,
             valor_nuevo=nuevo,
             sensible=sensible,
+            empresa_id=empresa_id,
             usuario_id=usuario.id,
             usuario_nombre=f"{usuario.nombre} ({usuario.usuario})",
             fecha=config.ahora(),
@@ -347,7 +407,7 @@ def aplicar_cambios(db, p: Proveedor, datos: dict, usuario: Usuario) -> List[str
     cambio_sensible = any(c in SENSIBLES for c in nombres)
     reenvio = p.estado_aprobacion == RECHAZADO and any(c != "activo" for c in nombres)
     if (p.estado_aprobacion == APROBADO and cambio_sensible) or reenvio:
-        _registrar(db, p, usuario, "estado", "Estado de aprobación", p.estado_texto, "Pendiente")
+        _registrar(db, p, usuario, "estado", "Estado de revisión", p.estado_texto, "Pendiente")
         p.estado_aprobacion = PENDIENTE
         p.aprobado_por_id = None
         p.aprobado_en = None
@@ -358,13 +418,13 @@ def aplicar_cambios(db, p: Proveedor, datos: dict, usuario: Usuario) -> List[str
 def motivo_no_puede_aprobar(p: Proveedor, usuario: Usuario) -> Optional[str]:
     """None si `usuario` puede aprobar o rechazar a `p`; si no, el motivo."""
     if not usuario.puede_aprobar:
-        return "Su perfil no permite aprobar proveedores."
+        return "Su perfil no permite revisar proveedores."
     if p.estado_aprobacion != PENDIENTE:
-        return "El proveedor no está pendiente de aprobación."
+        return "El proveedor no está pendiente de revisión."
     if usuario.id == p.creado_por_id:
-        return "No puede aprobar un proveedor que usted mismo creó."
+        return "No puede revisar un proveedor que usted mismo creó."
     if usuario.id == p.modificado_por_id:
-        return "No puede aprobar un proveedor cuya última modificación hizo usted."
+        return "No puede revisar un proveedor cuya última modificación hizo usted."
     return None
 
 
@@ -376,7 +436,7 @@ def aprobar(db, p: Proveedor, usuario: Usuario) -> None:
     p.aprobado_por_id = usuario.id
     p.aprobado_en = config.ahora()
     p.motivo_rechazo = None
-    _registrar(db, p, usuario, "aprobacion", "Estado de aprobación", "Pendiente", "Aprobado")
+    _registrar(db, p, usuario, "aprobacion", "Estado de revisión", "Pendiente", "Revisado")
 
 
 def rechazar(db, p: Proveedor, usuario: Usuario, motivo_rechazo: str) -> None:
@@ -390,7 +450,7 @@ def rechazar(db, p: Proveedor, usuario: Usuario, motivo_rechazo: str) -> None:
     p.aprobado_por_id = usuario.id
     p.aprobado_en = config.ahora()
     p.motivo_rechazo = motivo_rechazo
-    _registrar(db, p, usuario, "rechazo", "Estado de aprobación", "Pendiente", f"Rechazado: {motivo_rechazo}")
+    _registrar(db, p, usuario, "rechazo", "Estado de revisión", "Pendiente", f"Rechazado: {motivo_rechazo}")
 
 
 def cambios_por_revisar(db, p: Proveedor) -> List[Historial]:
@@ -417,6 +477,91 @@ def contar_pendientes(db) -> int:
         )
         or 0
     )
+
+
+# ---------------------------------------------------------------- crédito por empresa
+
+
+def empresas_visibles(db, usuario: Usuario) -> List[Empresa]:
+    """Empresas cuyo crédito puede ver `usuario`: todas las activas, o solo la suya si es creador."""
+    if usuario.rol in (ADMINISTRADOR, APROBADOR):
+        return empresas_activas(db)
+    if usuario.rol == CREADOR:
+        propia = empresa_de(usuario)
+        return [propia] if propia is not None else []
+    return []
+
+
+PREFIJO_CREDITO = "Crédito · "
+
+
+def condicion_historial_visible(usuario: Usuario):
+    """Condición SQL para que un creador no vea en el historial el crédito de otras empresas; None si ve todo."""
+    if usuario.rol != CREADOR:
+        return None
+    # Se permite por id de empresa, no por el nombre del campo (una empresa puede renombrarse y otra tomar su
+    # nombre). Un registro de crédito sin empresa queda oculto: el filtro se cierra por defecto.
+    es_credito = or_(Historial.empresa_id.is_not(None), Historial.campo.like(f"{PREFIJO_CREDITO}%"))
+    propia = empresa_de(usuario)
+    if propia is None:
+        return ~es_credito
+    return or_(~es_credito, Historial.empresa_id == propia.id)
+
+
+def puede_editar_credito(usuario: Usuario, empresa_id: int) -> bool:
+    """El administrador cambia cualquier crédito; el creador, solo el de su empresa; el revisor, ninguno."""
+    if usuario.rol == ADMINISTRADOR:
+        return True
+    return usuario.rol == CREADOR and empresa_id is not None and usuario.empresa_id == empresa_id
+
+
+def aplicar_credito(db, p: Proveedor, empresa: Empresa, tipo: Optional[str], valor: Optional[int], usuario: Usuario) -> bool:
+    """Guarda el crédito de `empresa` con `p` (tipo None lo borra) y lo anota en el historial.
+
+    No revisa permisos (lo usa también el importador) y no reabre la revisión: el crédito no es dato sensible.
+    Devuelve si cambió algo.
+    """
+    if empresa is None or not empresa.activo:
+        raise ErrorNegocio("La empresa está desactivada; no se puede cambiar su crédito.")
+    if tipo:
+        error = credito.validar(tipo, valor)
+        if error:
+            raise ErrorNegocio(error)
+        if tipo == credito.FIN_MES:
+            valor = None
+    else:
+        tipo, valor = None, None
+    fila = p.credito_de(empresa.id)
+    antes = (fila.credito_tipo, fila.credito_valor) if fila is not None else (None, None)
+    if antes == (tipo, valor):
+        return False
+    anterior = credito.texto(*antes) if fila is not None else "(vacío)"
+    nuevo = credito.texto(tipo, valor) if tipo else "(vacío)"
+    if tipo is None:
+        p.creditos.remove(fila)
+    elif fila is None:
+        p.creditos.append(ProveedorCredito(empresa_id=empresa.id, credito_tipo=tipo, credito_valor=valor))
+    else:
+        fila.credito_tipo, fila.credito_valor = tipo, valor
+    _registrar(db, p, usuario, "cambio", f"{PREFIJO_CREDITO}{empresa.nombre}", anterior, nuevo, sensible=False,
+               empresa_id=empresa.id)
+    db.flush()
+    return True
+
+
+def guardar_credito(db, p: Proveedor, empresa: Empresa, tipo: Optional[str], valor: Optional[int], usuario: Usuario) -> bool:
+    if empresa is None or not puede_editar_credito(usuario, empresa.id):
+        raise ErrorNegocio("Solo puede cambiar el crédito de su empresa.")
+    return aplicar_credito(db, p, empresa, tipo, valor, usuario)
+
+
+def proveedor_por_id(db, tipo_id_id: Optional[int], numero_id: Optional[str]) -> Optional[Proveedor]:
+    """El proveedor con ese tipo y número de ID, si ya está registrado."""
+    if not tipo_id_id or not numero_id:
+        return None
+    return db.scalars(
+        select(Proveedor).where(Proveedor.tipo_id_id == tipo_id_id, Proveedor.numero_id == numero_id)
+    ).first()
 
 
 # ---------------------------------------------------------------- facturas

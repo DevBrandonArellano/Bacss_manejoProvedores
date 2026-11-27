@@ -1,24 +1,24 @@
 {% extends "base.html" %}
-{% block titulo %}Aprobaciones{% endblock %}
+{% block titulo %}Revisiones{% endblock %}
 {% block contenido %}
 <div class="cabecera">
-  <h1>Aprobaciones <span class="suave">({{ tarjetas|length }} pendiente{{ "s" if tarjetas|length != 1 }})</span></h1>
+  <h1>Revisiones <span class="suave">({{ tarjetas|length }} pendiente{{ "s" if tarjetas|length != 1 }})</span></h1>
   {% if aprobables %}
   <form method="post" action="/aprobaciones/lote" id="lote" class="en-linea"
-        onsubmit="return confirm('¿Aprobar todos los proveedores seleccionados?')">
+        onsubmit="return confirm('¿Marcar como revisados todos los proveedores seleccionados?')">
     <input type="hidden" name="csrf_token" value="{{ csrf }}">
     <label class="casilla" style="margin:0">
       <input type="checkbox" onclick="document.querySelectorAll('input[form=lote][name=ids]:not(:disabled)').forEach(c => c.checked = this.checked)">
       Seleccionar todos
     </label>
-    <button type="submit" class="boton-ok">Aprobar seleccionados</button>
+    <button type="submit" class="boton-ok">Marcar seleccionados como revisados</button>
   </form>
   {% endif %}
 </div>
 
 <p class="suave">
   Un proveedor nuevo, o uno al que se le cambió el nombre, la identificación, la cuenta o el banco, queda pendiente
-  hasta que lo apruebe una persona distinta de quien lo creó o lo modificó por última vez.{% if facturacion %}
+  hasta que lo revise una persona distinta de quien lo creó o lo modificó por última vez.{% if facturacion %}
   Mientras tanto sus facturas no pueden salir en el archivo de pago.{% endif %}
 </p>
 
@@ -44,7 +44,7 @@
     <div class="acciones">
       <form method="post" action="/aprobaciones/{{ p.id }}/aprobar" class="en-linea">
         <input type="hidden" name="csrf_token" value="{{ csrf }}">
-        <button type="submit" class="boton-ok">Aprobar</button>
+        <button type="submit" class="boton-ok">Marcar como revisado</button>
       </form>
       <form method="post" action="/aprobaciones/{{ p.id }}/rechazar" class="en-linea">
         <input type="hidden" name="csrf_token" value="{{ csrf }}">
@@ -61,7 +61,8 @@
       <dt>Banco</dt><dd>{% if p.banco %}{{ p.banco.nombre }} (código {{ p.banco.codigo }}){% else %}—{% endif %}</dd>
       <dt>Cuenta</dt><dd class="mono">{{ p.tipo_cuenta.nombre if p.tipo_cuenta else "—" }} {{ p.numero_cuenta or "—" }}</dd>
       <dt>Correo</dt><dd>{{ p.correo or "—" }}</dd>
-      <dt>Crédito</dt><dd>{{ p.credito_texto }}</dd>
+      <dt>Crédito</dt>
+      <dd>{% for e in empresas_cols %}<div>{{ e.nombre }}: {{ p.credito_texto_de(e.id) }}</div>{% else %}<span class="suave">Aún no hay empresas.</span>{% endfor %}</dd>
     </dl>
     <div>
       <h3>Qué hay que revisar</h3>
@@ -94,7 +95,7 @@
   {% endif %}
 </div>
 {% else %}
-<div class="tarjeta"><p class="suave" style="margin:0">No hay proveedores pendientes de aprobación.</p></div>
+<div class="tarjeta"><p class="suave" style="margin:0">No hay proveedores pendientes de revisión.</p></div>
 {% endfor %}
 
 {% if rechazados %}

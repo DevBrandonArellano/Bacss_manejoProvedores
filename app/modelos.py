@@ -12,17 +12,28 @@ from .db import Base
 ADMINISTRADOR = "administrador"
 CREADOR = "creador"
 APROBADOR = "aprobador"
-ROLES = {ADMINISTRADOR: "Administrador", CREADOR: "Creador", APROBADOR: "Aprobador"}
+ROLES = {ADMINISTRADOR: "Administrador", CREADOR: "Creador", APROBADOR: "Revisor"}
 
 PENDIENTE = "pendiente"
 APROBADO = "aprobado"
 RECHAZADO = "rechazado"
-ESTADOS_APROBACION = {PENDIENTE: "Pendiente", APROBADO: "Aprobado", RECHAZADO: "Rechazado"}
+ESTADOS_APROBACION = {PENDIENTE: "Pendiente", APROBADO: "Revisado", RECHAZADO: "Rechazado"}
 
 FACTURA_PENDIENTE = "pendiente"
 FACTURA_PAGADA = "pagada"
 FACTURA_ANULADA = "anulada"
 ESTADOS_FACTURA = {FACTURA_PENDIENTE: "Pendiente", FACTURA_PAGADA: "Pagada", FACTURA_ANULADA: "Anulada"}
+
+
+class Empresa(Base):
+    """Empresa para la que trabaja un creador; cada una maneja su propio crédito con cada proveedor."""
+
+    __tablename__ = "empresas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(120))
+    nombre_norm: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class Usuario(Base):
@@ -35,6 +46,9 @@ class Usuario(Base):
     rol: Mapped[str] = mapped_column(String(20))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime)
+    empresa_id: Mapped[Optional[int]] = mapped_column(ForeignKey("empresas.id"), nullable=True)
+
+    empresa: Mapped[Optional[Empresa]] = relationship(foreign_keys=[empresa_id])
 
     @property
     def rol_texto(self) -> str:
@@ -124,10 +138,21 @@ class Proveedor(Base):
     creado_por: Mapped[Usuario] = relationship(foreign_keys=[creado_por_id])
     modificado_por: Mapped[Usuario] = relationship(foreign_keys=[modificado_por_id])
     facturas: Mapped[List["Factura"]] = relationship(back_populates="proveedor")
+    creditos: Mapped[List["ProveedorCredito"]] = relationship(
+        back_populates="proveedor", cascade="all, delete-orphan"
+    )
 
     @property
     def credito_texto(self) -> str:
+        """Crédito de las columnas antiguas; solo lo usa la facturación (desactivada)."""
         return credito.texto(self.credito_tipo, self.credito_valor)
+
+    def credito_de(self, empresa_id: int) -> Optional["ProveedorCredito"]:
+        return next((c for c in self.creditos if c.empresa_id == empresa_id), None)
+
+    def credito_texto_de(self, empresa_id: int) -> str:
+        fila = self.credito_de(empresa_id)
+        return credito.texto(fila.credito_tipo, fila.credito_valor) if fila is not None else "—"
 
     @property
     def estado_texto(self) -> str:
@@ -136,6 +161,22 @@ class Proveedor(Base):
     @property
     def aprobado(self) -> bool:
         return self.estado_aprobacion == APROBADO
+
+
+class ProveedorCredito(Base):
+    """Condición de crédito que una empresa tiene con un proveedor."""
+
+    __tablename__ = "proveedor_creditos"
+    __table_args__ = (UniqueConstraint("proveedor_id", "empresa_id", name="uq_credito_proveedor_empresa"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    proveedor_id: Mapped[int] = mapped_column(ForeignKey("proveedores.id"), index=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), index=True)
+    credito_tipo: Mapped[str] = mapped_column(String(20))
+    credito_valor: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    proveedor: Mapped[Proveedor] = relationship(back_populates="creditos")
+    empresa: Mapped[Empresa] = relationship()
 
 
 class Factura(Base):
@@ -181,6 +222,8 @@ class Historial(Base):
     valor_anterior: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     valor_nuevo: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sensible: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Solo en los cambios de crédito: la empresa dueña del registro (el nombre en `campo` puede cambiar).
+    empresa_id: Mapped[Optional[int]] = mapped_column(ForeignKey("empresas.id"), nullable=True, index=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
     usuario_nombre: Mapped[str] = mapped_column(String(120))
     fecha: Mapped[datetime] = mapped_column(DateTime, index=True)

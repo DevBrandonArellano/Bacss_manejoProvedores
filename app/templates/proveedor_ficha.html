@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_credito_campos.html" as campos_credito with context %}
 {% block titulo %}{{ p.nombre }}{% endblock %}
 {% block contenido %}
 <div class="cabecera">
@@ -33,18 +34,18 @@
 </div>
 {% elif p.estado_aprobacion == "pendiente" %}
 <div class="aviso aviso-alerta">
-  Pendiente de aprobación.{% if facturacion %} Mientras no se apruebe, sus facturas no pueden incluirse en el archivo de pago.{% endif %}
+  Pendiente de revisión.{% if facturacion %} Mientras no se revise, sus facturas no pueden incluirse en el archivo de pago.{% endif %}
   {% if usuario.puede_aprobar and bloqueo_aprobar %}<br>{{ bloqueo_aprobar }}{% endif %}
 </div>
 {% if usuario.puede_aprobar and not bloqueo_aprobar %}
 <div class="tarjeta">
-  <h2>Aprobación</h2>
-  <p class="suave">Revise sobre todo el banco y el número de cuenta antes de aprobar.</p>
+  <h2>Revisión</h2>
+  <p class="suave">Revise sobre todo el banco y el número de cuenta antes de marcarlo como revisado.</p>
   <div class="acciones">
     <form method="post" action="/aprobaciones/{{ p.id }}/aprobar" class="en-linea">
       <input type="hidden" name="csrf_token" value="{{ csrf }}">
       <input type="hidden" name="siguiente" value="/proveedores/{{ p.id }}">
-      <button type="submit" class="boton-ok">Aprobar</button>
+      <button type="submit" class="boton-ok">Marcar como revisado</button>
     </form>
     <form method="post" action="/aprobaciones/{{ p.id }}/rechazar" class="en-linea">
       <input type="hidden" name="csrf_token" value="{{ csrf }}">
@@ -71,7 +72,6 @@
       <dt>Tipo de ID</dt><dd>{{ p.tipo_id.nombre if p.tipo_id else "—" }}</dd>
       <dt>Número de ID</dt><dd class="mono">{{ p.numero_id or "—" }}</dd>
       <dt>Correo</dt><dd>{{ p.correo or "—" }}</dd>
-      <dt>Crédito</dt><dd>{{ p.credito_texto }}</dd>
     </dl>
   </div>
   <div class="tarjeta">
@@ -89,10 +89,34 @@
       <dt>Creado por</dt><dd>{{ p.creado_por.nombre }} · {{ p.creado_en|fechahora }}</dd>
       <dt>Última modificación</dt><dd>{{ p.modificado_por.nombre }} · {{ p.modificado_en|fechahora }}</dd>
       {% if p.aprobado %}
-      <dt>Aprobado por</dt><dd>{{ p.aprobado_por.nombre if p.aprobado_por else "—" }} · {{ p.aprobado_en|fechahora }}</dd>
+      <dt>Revisado por</dt><dd>{{ p.aprobado_por.nombre if p.aprobado_por else "—" }} · {{ p.aprobado_en|fechahora }}</dd>
       {% endif %}
     </dl>
   </div>
+</div>
+
+<div class="tarjeta">
+  <h2>Crédito por empresa</h2>
+  {% for c in creditos %}
+  <div class="credito-empresa">
+    <h3>{{ c.empresa.nombre }}: <span class="{{ 'suave' if c.texto == '—' }}">{{ c.texto }}</span></h3>
+    {% if c.editable %}
+    <form method="post" action="/proveedores/{{ p.id }}/credito">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <input type="hidden" name="empresa_id" value="{{ c.empresa.id }}">
+      <div class="rejilla">
+        {{ campos_credito.campos("-" ~ c.empresa.id, c.opcion, c.valor) }}
+      </div>
+      <p style="margin:.5rem 0 0"><button type="submit" class="boton-chico">Guardar crédito</button></p>
+    </form>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="suave" style="margin:0">
+    {% if creador_sin_empresa %}Su usuario no tiene empresa asignada.
+    {% else %}Aún no hay empresas; el administrador debe crearlas en Administración → Empresas.{% endif %}
+  </p>
+  {% endfor %}
 </div>
 
 {% if p.notas %}
